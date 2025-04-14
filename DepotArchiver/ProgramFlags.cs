@@ -6,8 +6,8 @@ using DragonLib.CommandLine;
 
 namespace DepotArchiver;
 
-internal record Flags : CommandLineFlags {
-	public static Flags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<Flags>();
+internal record ProgramFlags : CommandLineFlags {
+	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>();
 
 	[Flag("remember-password", Help = "remember password when logging in", Env = "DEPOTARCHIVER_REMEMBER_PASSWORD")]
 	public bool RememberPassword { get; set; }

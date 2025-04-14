@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using DepotArchiver.Steam;
 using Serilog;
 using SteamKit2;
+using SteamKit2.CDN;
 using DepotPlan =
 	System.Collections.Generic.Dictionary<
 		uint,
@@ -27,7 +28,7 @@ internal static class Program {
 	private static async Task Main() {
 		Log.Logger = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Console().CreateLogger();
 
-		var flags = Flags.Instance;
+		var flags = ProgramFlags.Instance;
 
 		if (flags is { NoAppInfo: true, NoManifests: true, NoDepotKeys: true, NoChunks: true }) {
 			Log.Error("Would do nothing, exiting...");
@@ -74,7 +75,7 @@ internal static class Program {
 			return;
 		}
 
-		var output = Path.GetFullPath(Flags.Instance.TargetDirectory);
+		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 
 		foreach (var appInfo in pics.Results) {
@@ -87,7 +88,7 @@ internal static class Program {
 
 	private static async Task FetchManifests(SteamSession client, DepotPlan plan) {
 		var done = new HashSet<(uint, ulong)>();
-		var output = Path.GetFullPath(Flags.Instance.TargetDirectory);
+		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
 				var manifestPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
@@ -138,7 +139,7 @@ internal static class Program {
 
 	private static async Task FetchDepotKeys(SteamSession client, DepotPlan plan) {
 		var done = new HashSet<uint>();
-		var output = Path.GetFullPath(Flags.Instance.TargetDirectory);
+		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 
 		foreach (var (appId, depot) in plan) {
@@ -158,15 +159,22 @@ internal static class Program {
 	}
 
 	private static async Task FetchChunks(SteamSession client, DepotPlan plan) {
-		var output = Path.GetFullPath(Flags.Instance.TargetDirectory);
+		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 		var parallelOptions = new ParallelOptions {
-			MaxDegreeOfParallelism = Flags.Instance.Threads,
+			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
 		};
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
 				var depotPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture));
+				var depotKeyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
+				var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath) : null;
+				if (ProgramFlags.Instance.Validate && depotKey is not { Length: 32 }) {
+					Log.Warning("Depot key for {Depot} is missing or invalid, cannot validate", depotId);
+					depotKey = null;
+				}
+
 				var manifestRootPath = Path.Combine(depotPath, "manifest");
 				Directory.CreateDirectory(depotPath);
 				Directory.CreateDirectory(manifestRootPath);
@@ -193,7 +201,7 @@ internal static class Program {
 					var chunks = manifest.Files.SelectMany(x => x.Chunks).DistinctBy(x => MemoryMarshal.Read<SHA1Hash>(x.ChunkID)).ToArray();
 					var done = 0;
 					await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
-						await FetchChunk(client, depotPath, appId, depotId, chunk);
+						await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
 						Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
 					});
 				}
@@ -201,18 +209,25 @@ internal static class Program {
 		}
 	}
 
-	private static async Task FetchChunk(SteamSession client, string path, uint appId, uint depotId, DepotManifest.ChunkData chunk) {
+	private static async Task FetchChunk(SteamSession client, string path, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
 		var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
 		var chunkPath = Path.Combine(path, chunkId);
-		if (File.Exists(chunkPath)) {
-			return;
-		}
-
-		var server = client.Connections.GetConnection();
-		SteamContent.CDNAuthToken? cdnToken = null;
-
 		var buffer = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
+
 		try {
+			if (File.Exists(chunkPath)) {
+				await using var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+				var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
+				stream.ReadExactly(existing);
+				if (ValidateChunk(depotKey, chunk, existing)) {
+					Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
+					return;
+				}
+			}
+
+			var server = client.Connections.GetConnection();
+			SteamContent.CDNAuthToken? cdnToken = null;
+
 			while (true) {
 				try {
 					if (cdnToken != null && cdnToken.Expiration >= DateTime.Now) {
@@ -220,7 +235,15 @@ internal static class Program {
 					}
 
 					var n = await client.Connections.Client.DownloadDepotChunkAsync(depotId, chunk, server, buffer, null, client.Connections.ProxyServer, cdnToken?.Token);
-					await File.WriteAllBytesAsync(chunkPath, buffer[..n]);
+					if (!ValidateChunk(depotKey, chunk, buffer.AsSpan(0, n))) {
+						Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
+						continue;
+					}
+
+					await using var stream = new FileStream(chunkPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+					stream.SetLength((int) chunk.CompressedLength);
+					stream.Position = 0;
+					stream.Write(buffer.AsSpan(0, n));
 					return;
 				} catch (SteamKitWebRequestException ex) {
 					switch (ex.StatusCode) {
@@ -245,7 +268,24 @@ internal static class Program {
 		}
 	}
 
-	private static async Task<DepotPlan> ParsePlan(Flags flags) {
+	private static bool ValidateChunk(byte[]? depotKey, DepotManifest.ChunkData chunk, Span<byte> buffer) {
+		if (!ProgramFlags.Instance.Validate || depotKey == null) {
+			return true;
+		}
+
+		var targetBuffer = ArrayPool<byte>.Shared.Rent((int) chunk.UncompressedLength);
+		try {
+			DepotChunk.Process(chunk, buffer, targetBuffer, depotKey);
+		} catch {
+			return true;
+		} finally {
+			ArrayPool<byte>.Shared.Return(targetBuffer);
+		}
+
+		return false;
+	}
+
+	private static async Task<DepotPlan> ParsePlan(ProgramFlags flags) {
 		await using var stream = new FileStream(flags.ArchivePlanFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 		using var reader = new StreamReader(stream);
 

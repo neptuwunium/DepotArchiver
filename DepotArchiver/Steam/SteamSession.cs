@@ -199,7 +199,7 @@ internal sealed class SteamSession : IDisposable {
 					AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(new AuthSessionDetails {
 						Username = Details.Username,
 						Password = Details.Password,
-						IsPersistentSession = Flags.Instance.RememberPassword,
+						IsPersistentSession = ProgramFlags.Instance.RememberPassword,
 						GuardData = ConfigStore.Instance.GuardData.GetValueOrDefault(Details.Username),
 						Authenticator = new UserConsoleAuthenticator(),
 					});
@@ -262,7 +262,7 @@ internal sealed class SteamSession : IDisposable {
 		try {
 			var isSteamGuard = loggedOn.Result == EResult.AccountLogonDenied;
 			var isTOTP = loggedOn.Result == EResult.AccountLoginDeniedNeedTwoFactor;
-			var isAccessToken = Flags.Instance.RememberPassword && Details.AccessToken != null &&
+			var isAccessToken = ProgramFlags.Instance.RememberPassword && Details.AccessToken != null &&
 				loggedOn.Result is EResult.InvalidPassword
 					or EResult.InvalidSignature
 					or EResult.AccessDenied
