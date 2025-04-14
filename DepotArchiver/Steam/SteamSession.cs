@@ -72,6 +72,10 @@ internal sealed class SteamSession : IDisposable {
 	public Task FullyLoggedInTask => GotLicensesTCS.Task;
 
 	public void Dispose() {
+		if (Aborted) {
+			return;
+		}
+
 		Disconnect();
 	}
 
@@ -156,7 +160,6 @@ internal sealed class SteamSession : IDisposable {
 	}
 
 	public void Connect() {
-		Aborted = false;
 		Connecting = true;
 		ConnectionBackoff = 0;
 		AuthSession = null;
