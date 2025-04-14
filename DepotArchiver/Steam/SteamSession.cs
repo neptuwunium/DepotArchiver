@@ -107,9 +107,9 @@ internal sealed class SteamSession : IDisposable {
 		var requestCode = await Content.GetManifestRequestCode(depotId, appId, manifestId, branch);
 
 		if (requestCode == 0) {
-			Log.Error("No manifest code was returned for depot {DepotId}", depotId);
+			Log.Error("No manifest code was returned for depot {DepotId} and manifest {ManifestId}", depotId, manifestId);
 		} else {
-			Log.Debug("Got manifest request code for depot {DepotId}", depotId);
+			Log.Debug("Got manifest request code for depot {DepotId} and manifest {ManifestId}", depotId, manifestId);
 		}
 
 		return requestCode;
@@ -340,6 +340,14 @@ internal sealed class SteamSession : IDisposable {
 
 			IsLoggedOn = true;
 			CellId = loggedOn.CellID;
+
+			if (!string.IsNullOrEmpty(Details.Username)) {
+				return;
+			}
+
+			// anonymous login won't get any licenses
+			GotLicensesTCS.SetResult();
+			GotLicensesTCS = new TaskCompletionSource();
 		} catch (Exception ex) {
 			Log.Error(ex, "Failed to authenticate with Steam");
 			Abort(false);
