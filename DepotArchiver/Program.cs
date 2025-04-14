@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Buffers;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
 using DepotArchiver.Steam;
 using Serilog;
+using Serilog.Events;
 using SteamKit2;
 using SteamKit2.CDN;
 using DepotPlan =
@@ -26,7 +28,7 @@ namespace DepotArchiver;
 
 internal static class Program {
 	private static async Task Main() {
-		Log.Logger = new LoggerConfiguration().MinimumLevel.Debug().WriteTo.Console().CreateLogger();
+		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
 
 		var flags = ProgramFlags.Instance;
 
@@ -156,13 +158,18 @@ internal static class Program {
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var depotId in depot.Keys.Where(depotId => done.Add(depotId))) {
+				var keyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
+				if (File.Exists(keyPath)) {
+					continue;
+				}
+
 				try {
 					var key = await client.RequestDepotKey(depotId, appId);
 					if (key == null) {
 						continue;
 					}
 
-					await File.WriteAllBytesAsync(Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey"), key);
+					await File.WriteAllBytesAsync(keyPath, key);
 					Log.Information("Saved depots/{DepotId}.depotkey", depotId);
 				} catch (Exception ex) {
 					Log.Error(ex, "Could not get depot key for {Id}", depotId);
