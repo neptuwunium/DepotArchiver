@@ -240,9 +240,10 @@ internal static class Program {
 				var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
 				stream.ReadExactly(existing);
 				if (ValidateChunk(depotKey, chunk, existing)) {
-					Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
 					return;
 				}
+
+				Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
 			}
 
 			var server = client.Connections.GetConnection();
