@@ -302,12 +302,12 @@ internal static class Program {
 		try {
 			DepotChunk.Process(chunk, buffer, targetBuffer, depotKey);
 		} catch {
-			return true;
+			return false;
 		} finally {
 			ArrayPool<byte>.Shared.Return(targetBuffer);
 		}
 
-		return false;
+		return true;
 	}
 
 	private static async Task<DepotPlan> ParsePlan(ProgramFlags flags) {
