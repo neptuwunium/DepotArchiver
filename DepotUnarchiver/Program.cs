@@ -119,7 +119,7 @@ internal static class Program {
 			}
 
 			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
-			var accessor = map.CreateViewAccessor((long) chunk.Offset, n);
+			using var accessor = map.CreateViewAccessor((long) chunk.Offset, n);
 			accessor.WriteArray(0, uncompressed, 0, n);
 		} catch (Exception ex) {
 			Log.Error(ex, "Cannot process chunk {Chunk}", Path.GetFileName(path));
