@@ -37,11 +37,18 @@ internal sealed class SteamSession : IDisposable {
 		Callbacks.Subscribe<SteamApps.LicenseListCallback>(LicenseListCallback);
 	}
 
+	public void TickCallbacks() {
+		while (!Aborted) {
+			Callbacks.RunWaitCallbacks(TimeSpan.FromMilliseconds(100));
+		}
+	}
+
+
 	internal Dictionary<uint, ulong> AppTokens { get; } = [];
 	internal Dictionary<uint, ulong> PackageTokens { get; } = [];
 	internal Dictionary<uint, byte[]> DepotKeys { get; } = [];
 	internal ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
-	internal List<SteamApps.LicenseListCallback.License> Licenses { get; private set; } = [];
+	internal List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
 
 	internal SteamClient Client { get; set; }
 	internal SteamUser User { get; set; }
@@ -65,8 +72,6 @@ internal sealed class SteamSession : IDisposable {
 	public Task FullyLoggedInTask => GotLicensesTCS.Task;
 
 	public void Dispose() {
-		GotLicensesTCS.SetCanceled();
-		Connections.Dispose();
 		Disconnect();
 	}
 
@@ -170,7 +175,9 @@ internal sealed class SteamSession : IDisposable {
 		Aborted = true;
 		Connecting = false;
 		IsConnectionRecovery = false;
+		GotLicensesTCS.SetCanceled();
 		Client.Disconnect();
+		Connections.Dispose();
 
 		while (!DidDisconnect) {
 			Callbacks.RunWaitAllCallbacks(TimeSpan.FromMilliseconds(100));
@@ -271,7 +278,10 @@ internal sealed class SteamSession : IDisposable {
 
 			if (isSteamGuard || isTOTP || isAccessToken) {
 				ExpectingDisconnectRemote = true;
-				Abort(false);
+
+				while (!DidDisconnect) {
+					Callbacks.RunWaitAllCallbacks(TimeSpan.FromMilliseconds(100));
+				}
 
 				if (!isAccessToken) {
 					Log.Information("This account is protected by Steam Guard.");

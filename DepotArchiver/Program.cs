@@ -49,6 +49,13 @@ internal static class Program {
 			LoginID = flags.LoginId ?? 0xDEE2DEE2, // DEERDEER
 		});
 
+		var loop = new Thread((clientObj) => {
+			((SteamSession) clientObj!).TickCallbacks();
+		});
+		loop.Start(client);
+
+		client.Connect();
+
 		await client.FullyLoggedInTask;
 
 		if (!flags.NoAppInfo) {
@@ -66,6 +73,9 @@ internal static class Program {
 		if (!flags.NoChunks) {
 			await FetchChunks(client, plan);
 		}
+
+		client.Disconnect();
+		loop.Join();
 	}
 
 	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan) {
@@ -81,6 +91,7 @@ internal static class Program {
 		foreach (var appInfo in pics.Results) {
 			foreach (var (appId, app) in appInfo.Apps) {
 				var target = Path.Combine(output, appId.ToString("D", CultureInfo.InvariantCulture) + ".vdf");
+				Log.Information("Saved {Id}.vdf", appId);
 				app.KeyValues.SaveToFile(target, false);
 			}
 		}
@@ -112,6 +123,7 @@ internal static class Program {
 							// no intro wants it in a zip file with one file named "z"
 							var manifest = await client.Connections.Client.DownloadManifestAsync(depotId, manifestId, token, server, null, client.Connections.ProxyServer, cdnToken?.Token);
 							manifest.SaveToFile(Path.Combine(manifestPath, manifestId.ToString("D", CultureInfo.InvariantCulture)));
+							Log.Information("Saved depots/{DepotId}/manifests/{ManifestId}", depotId, manifestId);
 							break;
 						} catch (SteamKitWebRequestException ex) {
 							if (ex.StatusCode == HttpStatusCode.Forbidden && cdnToken == null) {
@@ -151,6 +163,7 @@ internal static class Program {
 					}
 
 					await File.WriteAllBytesAsync(Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey"), key);
+					Log.Information("Saved depots/{DepotId}.depotkey", depotId);
 				} catch (Exception ex) {
 					Log.Error(ex, "Could not get depot key for {Id}", depotId);
 				}
@@ -306,7 +319,7 @@ internal static class Program {
 
 			var appId = uint.Parse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture);
 			var depotId = uint.Parse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture);
-			var manifestId = uint.Parse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture);
+			var manifestId = ulong.Parse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture);
 			var branch = parts.ElementAtOrDefault(3) ?? "public";
 
 			if (!plan.TryGetValue(appId, out var app)) {
