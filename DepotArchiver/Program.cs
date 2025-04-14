@@ -236,6 +236,10 @@ internal static class Program {
 
 		try {
 			if (File.Exists(chunkPath)) {
+				if (!ProgramFlags.Instance.Validate) {
+					return;
+				}
+
 				await using var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 				var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
 				stream.ReadExactly(existing);
