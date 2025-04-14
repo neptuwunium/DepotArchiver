@@ -45,6 +45,6 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("threads", Help = "number of download threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
-	[Flag("login-id", Help = "the Unique login id for login session tracking")]
+	[Flag("login-id", Help = "the unique login id for login session tracking")]
 	public uint? LoginId { get; set; }
 }
