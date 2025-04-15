@@ -8,9 +8,10 @@ using System.Runtime.InteropServices;
 namespace DepotArchiver;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1), InlineArray(20)]
-internal struct SHA1Hash : IEquatable<SHA1Hash> {
+internal struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 	public byte Value;
 
+	public int CompareTo(SHA1Hash other) => ((Span<byte>) this).SequenceCompareTo(other);
 	public bool Equals(SHA1Hash other) => ((Span<byte>) this).SequenceEqual(other);
 
 	public override bool Equals(object? obj) => obj is SHA1Hash other && Equals(other);
@@ -20,4 +21,6 @@ internal struct SHA1Hash : IEquatable<SHA1Hash> {
 		hashCode.AddBytes(this);
 		return hashCode.ToHashCode();
 	}
+
+	public override string ToString() => Convert.ToHexStringLower(this);
 }
