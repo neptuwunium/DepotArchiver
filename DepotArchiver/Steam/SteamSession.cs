@@ -249,7 +249,7 @@ internal sealed class SteamSession : IDisposable {
 
 		if (!IsConnectionRecovery && (disconnected.UserInitiated || ExpectingDisconnectRemote)) {
 			Log.Information("Disconnected from Steam");
-			Aborted = true;
+			Aborted = disconnected.UserInitiated;
 		} else if (ConnectionBackoff >= 10) {
 			Log.Information("Could not connect to Steam after 10 tries");
 			Abort(false);
@@ -295,7 +295,12 @@ internal sealed class SteamSession : IDisposable {
 						Log.Information("Please enter your 2 factor auth code from your authenticator app: ");
 						Details.TwoFactorCode = Console.ReadLine();
 					} while (string.IsNullOrEmpty(Details.TwoFactorCode));
-				} else if (isAccessToken) {
+				} else if (!isAccessToken) {
+					do {
+						Log.Information("Please enter the authentication code sent to your email address: ");
+						Details.AuthCode = Console.ReadLine();
+					} while (string.IsNullOrEmpty(Details.AuthCode));
+				} else {
 					if (!string.IsNullOrEmpty(Details.Username)) {
 						ConfigStore.Instance.LoginTokens.Remove(Details.Username);
 						ConfigStore.Instance.Save();
@@ -304,11 +309,6 @@ internal sealed class SteamSession : IDisposable {
 					Log.Information($"Access token was rejected ({loggedOn.Result}).");
 					Abort(false);
 					return;
-				} else {
-					do {
-						Log.Information("Please enter the authentication code sent to your email address: ");
-						Details.AuthCode = Console.ReadLine();
-					} while (string.IsNullOrEmpty(Details.AuthCode));
 				}
 
 				Log.Information("Retrying Steam3 connection...");
