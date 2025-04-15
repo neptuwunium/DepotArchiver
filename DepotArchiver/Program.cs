@@ -199,6 +199,7 @@ internal static class Program {
 				Directory.CreateDirectory(depotPath);
 				Directory.CreateDirectory(manifestRootPath);
 
+				var handled = new HashSet<SHA1Hash>();
 				foreach (var manifestId in manifests.Keys) {
 					var manifestPath = Path.Combine(manifestRootPath, manifestId.ToString("D", CultureInfo.InvariantCulture));
 					if (!File.Exists(manifestPath)) {
@@ -218,7 +219,10 @@ internal static class Program {
 
 					await client.Connections.UpdateServerList(client.CellId);
 
-					var chunks = manifest.Files.SelectMany(x => x.Chunks).DistinctBy(x => MemoryMarshal.Read<SHA1Hash>(x.ChunkID)).ToArray();
+					var chunks = manifest.Files
+										 .SelectMany(x => x.Chunks)
+										 .Where(x => handled.Add(MemoryMarshal.Read<SHA1Hash>(x.ChunkID)))
+										 .ToArray();
 					var done = 0;
 					await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
 						await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
@@ -247,7 +251,11 @@ internal static class Program {
 					return;
 				}
 
-				Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
+				Log.Warning("Chunk {Id} failed validation", chunkId);
+			}
+
+			if (ProgramFlags.Instance.OnlyValidate) {
+				return;
 			}
 
 			var server = client.Connections.GetConnection();

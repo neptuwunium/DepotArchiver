@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+using System.Globalization;
 using DragonLib.CommandLine;
 
 namespace DepotArchiver;
@@ -42,9 +43,12 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("no-chunks", Help = "do not fetch chunks")]
 	public bool NoChunks { get; set; }
 
+	[Flag("only-validate", Help = "only validate chunks, do not download")]
+	public bool OnlyValidate { get; set; }
+
 	[Flag("threads", Help = "number of download threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
-	[Flag("login-id", Help = "the unique login id for login session tracking")]
+	[Flag("login-id", Extra = NumberStyles.Integer | NumberStyles.AllowHexSpecifier, Help = "the unique login id for login session tracking")]
 	public uint? LoginId { get; set; }
 }
