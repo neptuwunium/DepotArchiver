@@ -40,7 +40,7 @@ internal static class Program {
 			return;
 		}
 
-		var depotKey = File.ReadAllBytes(depotPath);
+		var depotKey = File.ReadAllBytes(depotKeyPath);
 		if (depotKey.Length != 32) {
 			Log.Error("Invalid depot key, expected a 32-byte key");
 			return;
@@ -55,7 +55,7 @@ internal static class Program {
 		var ops = new List<ChunkLoadOp>();
 
 		foreach (var file in manifest.Files) {
-			var dest = Path.GetDirectoryName(Path.Combine(flags.TargetDirectory, file.FileName));
+			var dest = Path.Combine(flags.TargetDirectory, file.FileName);
 			if (string.IsNullOrEmpty(dest)) {
 				continue;
 			}
@@ -65,7 +65,7 @@ internal static class Program {
 					continue;
 				}
 
-				var src = Path.GetDirectoryName(Path.Combine(flags.TargetDirectory, file.LinkTarget));
+				var src = Path.Combine(flags.TargetDirectory, file.LinkTarget);
 
 				if (string.IsNullOrEmpty(src)) {
 					continue;
@@ -86,7 +86,11 @@ internal static class Program {
 				continue;
 			}
 
-			var memoryMappedFile = MemoryMappedFile.CreateNew(dest, (long) file.TotalSize);
+			Log.Information("Allocating {Path}", dest);
+			var stream = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+			stream.SetLength((long) file.TotalSize);
+
+			var memoryMappedFile = MemoryMappedFile.CreateFromFile(stream, null, stream.Length, MemoryMappedFileAccess.ReadWrite, HandleInheritability.None, false);
 			fileMaps.Add(memoryMappedFile);
 
 			foreach (var chunk in file.Chunks) {
@@ -121,6 +125,8 @@ internal static class Program {
 			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
 			using var accessor = map.CreateViewAccessor((long) chunk.Offset, n);
 			accessor.WriteArray(0, uncompressed, 0, n);
+
+			Log.Information("Processed Chunk {Chunk}", Path.GetFileName(path));
 		} catch (Exception ex) {
 			Log.Error(ex, "Cannot process chunk {Chunk}", Path.GetFileName(path));
 		} finally {
