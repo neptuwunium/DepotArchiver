@@ -241,13 +241,13 @@ internal sealed class SteamSession : IDisposable {
 		Details.Password = null;
 		Details.AccessToken = result.RefreshToken;
 
-		if (result.NewGuardData != null) {
-			ConfigStore.Instance.GuardData[result.AccountName] = result.NewGuardData;
-		} else {
-			ConfigStore.Instance.GuardData.Remove(result.AccountName);
-		}
-
 		if (ProgramFlags.Instance.RememberPassword) {
+			if (result.NewGuardData != null) {
+				ConfigStore.Instance.GuardData[result.AccountName] = result.NewGuardData;
+			} else {
+				ConfigStore.Instance.GuardData.Remove(result.AccountName);
+			}
+
 			ConfigStore.Instance.LoginTokens[result.AccountName] = result.RefreshToken;
 			ConfigStore.Instance.Save();
 		}
@@ -294,6 +294,11 @@ internal sealed class SteamSession : IDisposable {
 			}
 
 			if (loggedOn.Result != EResult.OK) {
+				if (!string.IsNullOrEmpty(Details.Username) && ProgramFlags.Instance.RememberPassword) {
+					ConfigStore.Instance.LoginTokens.Remove(Details.Username);
+					ConfigStore.Instance.Save();
+				}
+
 				Log.Information("Unable to login to Steam3: {Result}", loggedOn.Result);
 				Abort();
 				return;
