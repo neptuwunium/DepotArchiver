@@ -45,6 +45,7 @@ internal static class Program {
 		}
 
 		using var client = new SteamSession(new SteamUser.LogOnDetails {
+			MachineName = $"{Environment.MachineName} (Archival)",
 			Username = flags.Username,
 			Password = flags.Password,
 			ShouldRememberPassword = flags.RememberPassword,

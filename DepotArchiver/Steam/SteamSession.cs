@@ -162,7 +162,6 @@ internal sealed class SteamSession : IDisposable {
 	public void Connect() {
 		Connecting = true;
 		ConnectionBackoff = 0;
-		AuthSession = null;
 
 		ResetConnectionFlags();
 		Client.Connect();
@@ -205,32 +204,21 @@ internal sealed class SteamSession : IDisposable {
 			} else {
 				Log.Information("Logging '{Username}' into Steam3...", Details.Username);
 
-				if (AuthSession is null) {
-					AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(new AuthSessionDetails {
-						Username = Details.Username,
-						Password = Details.Password,
-						IsPersistentSession = ProgramFlags.Instance.RememberPassword,
-						GuardData = ConfigStore.Instance.GuardData.GetValueOrDefault(Details.Username),
-						Authenticator = new UserConsoleAuthenticator(),
-					});
-				} else {
-					var result = await AuthSession.PollingWaitForResultAsync();
+				var authData = new AuthSessionDetails {
+					Username = Details.Username,
+					Password = Details.Password,
+					IsPersistentSession = ProgramFlags.Instance.RememberPassword,
+					GuardData = ConfigStore.Instance.GuardData.GetValueOrDefault(Details.Username),
+					Authenticator = new Authenticator(),
+				};
 
-					Details.Username = result.AccountName;
+				if (ProgramFlags.Instance.RememberPassword && ConfigStore.Instance.LoginTokens.TryGetValue(authData.Username, out var token)) {
+					Details.AccessToken = token;
 					Details.Password = null;
-					Details.AccessToken = result.RefreshToken;
-
-					if (result.NewGuardData != null) {
-						ConfigStore.Instance.GuardData[result.AccountName] = result.NewGuardData;
-					} else {
-						ConfigStore.Instance.GuardData.Remove(result.AccountName);
-					}
-
-					ConfigStore.Instance.LoginTokens[result.AccountName] = result.RefreshToken;
-					ConfigStore.Instance.Save();
-
-					AuthSession = null;
 				}
+
+				AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(authData);
+				await RefreshSession();
 
 				User.LogOn(Details);
 			}
@@ -239,6 +227,29 @@ internal sealed class SteamSession : IDisposable {
 		} catch (Exception ex) {
 			Log.Error(ex, "Failed to authenticate with Steam");
 			Abort(false);
+		}
+	}
+
+	private async Task RefreshSession() {
+		if (AuthSession == null) {
+			return;
+		}
+
+		var result = await AuthSession.PollingWaitForResultAsync();
+
+		Details.Username = result.AccountName;
+		Details.Password = null;
+		Details.AccessToken = result.RefreshToken;
+
+		if (result.NewGuardData != null) {
+			ConfigStore.Instance.GuardData[result.AccountName] = result.NewGuardData;
+		} else {
+			ConfigStore.Instance.GuardData.Remove(result.AccountName);
+		}
+
+		if (ProgramFlags.Instance.RememberPassword) {
+			ConfigStore.Instance.LoginTokens[result.AccountName] = result.RefreshToken;
+			ConfigStore.Instance.Save();
 		}
 	}
 
@@ -270,52 +281,6 @@ internal sealed class SteamSession : IDisposable {
 
 	private async void LogOnCallback(SteamUser.LoggedOnCallback loggedOn) {
 		try {
-			var isSteamGuard = loggedOn.Result == EResult.AccountLogonDenied;
-			var isTOTP = loggedOn.Result == EResult.AccountLoginDeniedNeedTwoFactor;
-			var isAccessToken = ProgramFlags.Instance.RememberPassword && Details.AccessToken != null &&
-				loggedOn.Result is EResult.InvalidPassword
-					or EResult.InvalidSignature
-					or EResult.AccessDenied
-					or EResult.Expired
-					or EResult.Revoked;
-
-			if (isSteamGuard || isTOTP || isAccessToken) {
-				ExpectingDisconnectRemote = true;
-
-				while (!DidDisconnect) {
-					Callbacks.RunWaitAllCallbacks(TimeSpan.FromMilliseconds(100));
-				}
-
-				if (!isAccessToken) {
-					Log.Information("This account is protected by Steam Guard.");
-				}
-
-				if (isTOTP) {
-					do {
-						Log.Information("Please enter your 2 factor auth code from your authenticator app: ");
-						Details.TwoFactorCode = Console.ReadLine();
-					} while (string.IsNullOrEmpty(Details.TwoFactorCode));
-				} else if (!isAccessToken) {
-					do {
-						Log.Information("Please enter the authentication code sent to your email address: ");
-						Details.AuthCode = Console.ReadLine();
-					} while (string.IsNullOrEmpty(Details.AuthCode));
-				} else {
-					if (!string.IsNullOrEmpty(Details.Username)) {
-						ConfigStore.Instance.LoginTokens.Remove(Details.Username);
-						ConfigStore.Instance.Save();
-					}
-
-					Log.Information($"Access token was rejected ({loggedOn.Result}).");
-					Abort(false);
-					return;
-				}
-
-				Log.Information("Retrying Steam3 connection...");
-				Connect();
-				return;
-			}
-
 			// ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
 			switch (loggedOn.Result) {
 				case EResult.TryAnotherCM:
