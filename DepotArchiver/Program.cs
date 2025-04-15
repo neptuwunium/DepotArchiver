@@ -60,7 +60,13 @@ internal static class Program {
 
 		client.Connect();
 
-		await client.FullyLoggedInTask;
+		try {
+			await client.FullyLoggedInTask;
+		} catch (TaskCanceledException) {
+			Log.Error("Could not fully log in, exiting");
+			loop.Join();
+			return;
+		}
 
 		if (!flags.NoAppInfo) {
 			await FetchAppInfo(client, plan);

@@ -167,7 +167,10 @@ internal sealed class SteamSession : IDisposable {
 		Client.Connect();
 	}
 
-	public void Abort(bool sendLogOff = true) => Disconnect(sendLogOff);
+	public void Abort(bool sendLogOff = true) {
+		ExpectingDisconnectRemote = true;
+		Disconnect(sendLogOff);
+	}
 
 	public void Disconnect(bool sendLogOff = true) {
 		if (sendLogOff) {
@@ -217,8 +220,13 @@ internal sealed class SteamSession : IDisposable {
 					Details.Password = null;
 				}
 
-				AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(authData);
-				await RefreshSession();
+				try {
+					AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(authData);
+					await RefreshSession();
+				} catch (AuthenticationException ex) {
+					Log.Error(ex, "Failed to authenticate with steam");
+					Abort(false);
+				}
 
 				User.LogOn(Details);
 			}
@@ -260,7 +268,7 @@ internal sealed class SteamSession : IDisposable {
 
 		if (!IsConnectionRecovery && (disconnected.UserInitiated || ExpectingDisconnectRemote)) {
 			Log.Information("Disconnected from Steam");
-			Aborted = disconnected.UserInitiated;
+			Aborted = true;
 		} else if (ConnectionBackoff >= 10) {
 			Log.Information("Could not connect to Steam after 10 tries");
 			Abort(false);
