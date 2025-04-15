@@ -6,6 +6,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.MemoryMappedFiles;
+using DragonLib;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -108,6 +109,8 @@ internal static class Program {
 		foreach (var fileMap in fileMaps) {
 			fileMap.Dispose();
 		}
+
+		Log.Information("Unpacked {Size} files", manifest.Files.Sum(x => (long) x.TotalSize).GetHumanReadableBytes());
 	}
 
 	private static void ProcessChunk(ChunkLoadOp op) {

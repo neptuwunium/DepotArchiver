@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
 using DepotArchiver.Steam;
+using DragonLib;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -51,7 +52,7 @@ internal static class Program {
 			LoginID = flags.LoginId ?? 0xDEE2DEE2, // DEERDEER
 		});
 
-		var loop = new Thread((clientObj) => {
+		var loop = new Thread(clientObj => {
 			((SteamSession) clientObj!).TickCallbacks();
 		});
 		loop.Start(client);
@@ -221,13 +222,23 @@ internal static class Program {
 
 					var chunks = manifest.Files
 										 .SelectMany(x => x.Chunks)
+										 .Where(x => ProgramFlags.Instance.Validate || !File.Exists(Path.Combine(depotPath, Convert.ToHexStringLower(x.ChunkID!))))
 										 .Where(x => handled.Add(MemoryMarshal.Read<SHA1Hash>(x.ChunkID)))
 										 .ToArray();
-					var done = 0;
-					await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
-						await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
-						Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
-					});
+
+					if (chunks.Length > 0) {
+						Log.Information("Beginning download of {Manifest} for {Depot} ({Size})", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
+
+						var done = 0;
+						await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
+							await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
+							Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
+						});
+
+						Log.Information("Downloaded {Total} new chunks", chunks.Length);
+					} else {
+						Log.Debug("Manifest has no new chunks");
+					}
 				}
 			}
 		}
