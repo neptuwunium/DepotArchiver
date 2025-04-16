@@ -162,13 +162,18 @@ internal static class Program {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
-				var manifestPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
-				Directory.CreateDirectory(manifestPath);
+				var manifestRootPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
+				Directory.CreateDirectory(manifestRootPath);
 
 				SteamContent.CDNAuthToken? cdnToken = null;
 				var server = client.Connections.GetConnection();
 				foreach (var (manifestId, branch) in manifests) {
 					if (!done.Add((depotId, manifestId))) {
+						continue;
+					}
+
+					var manifestPath = Path.Combine(manifestRootPath, manifestId.ToString("D", CultureInfo.InvariantCulture));
+					if (File.Exists(manifestPath)) {
 						continue;
 					}
 
@@ -182,7 +187,7 @@ internal static class Program {
 
 							// no intro wants it in a zip file with one file named "z"
 							var manifest = await client.Connections.Client.DownloadManifestAsync(depotId, manifestId, token, server, null, client.Connections.ProxyServer, cdnToken?.Token);
-							manifest.SaveToFile(Path.Combine(manifestPath, manifestId.ToString("D", CultureInfo.InvariantCulture)));
+							manifest.SaveToFile(manifestPath);
 							Log.Information("Saved depots/{DepotId}/manifests/{ManifestId}", depotId, manifestId);
 							break;
 						} catch (SteamKitWebRequestException ex) {
