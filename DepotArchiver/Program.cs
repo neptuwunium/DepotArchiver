@@ -333,21 +333,24 @@ internal static class Program {
 				}
 
 				Log.Warning("Chunk {Id} failed validation", chunkId);
-			}
-
-			if (ProgramFlags.Instance.OnlyValidate) {
+			} else if(ProgramFlags.Instance.Validate) {
 				if (Console.IsErrorRedirected) {
 					await Console.Error.WriteLineAsync(chunkId);
 				}
 
 				Log.Warning("Chunk {Id} does not exist", chunkId);
+			}
+
+			if (ProgramFlags.Instance.OnlyValidate) {
 				return;
 			}
 
 			var server = client.Connections.GetConnection();
 			SteamContent.CDNAuthToken? cdnToken = null;
 
-			while (true) {
+			var attempts = client.Connections.Attempts;
+			var currentAttempt = attempts;
+			while (currentAttempt++ < attempts) {
 				try {
 					if (cdnToken != null && cdnToken.Expiration >= DateTime.Now) {
 						cdnToken = await client.RequestAuthToken(appId, depotId, server);
@@ -370,10 +373,18 @@ internal static class Program {
 							cdnToken = await client.RequestAuthToken(appId, depotId, server);
 							continue;
 						case HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound:
+							if (Console.IsErrorRedirected) {
+								await Console.Error.WriteLineAsync(chunkId);
+							}
+
 							Log.Error("Cannot download chunk {Id} for {DepotId}, got {Code}", chunkId, depotId, ex.StatusCode);
 							return;
 					}
 				} catch (OperationCanceledException) {
+					if (Console.IsErrorRedirected) {
+						await Console.Error.WriteLineAsync(chunkId);
+					}
+
 					return;
 				} catch (Exception ex) {
 					Log.Error(ex, "Chunk {Id} for {DepotId} failed, rotating servers...", chunkId, depotId);

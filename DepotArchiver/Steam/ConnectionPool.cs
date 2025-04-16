@@ -19,6 +19,7 @@ internal class ConnectionPool : IDisposable {
 	internal Client Client { get; }
 	internal Server? ProxyServer { get; private set; }
 	private int NextServer { get; set; }
+	public int Attempts => Servers.Count;
 
 	public void Dispose() => Client.Dispose();
 
