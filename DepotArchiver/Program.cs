@@ -104,6 +104,8 @@ internal static class Program {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 
+		Log.Information("Saving app info to {Path}", output);
+
 		foreach (var appInfo in pics.Results) {
 			foreach (var (appId, app) in appInfo.Apps) {
 				var target = Path.Combine(output, appId.ToString("D", CultureInfo.InvariantCulture) + ".vdf");
@@ -164,6 +166,9 @@ internal static class Program {
 	private static async Task FetchManifests(SteamSession client, DepotPlan plan) {
 		var done = new HashSet<(uint, ulong)>();
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
+
+		Log.Information("Saving manifests to {Path}", output);
+
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
 				var manifestRootPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
@@ -223,6 +228,8 @@ internal static class Program {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 
+		Log.Information("Saving depot keys to {Path}", output);
+
 		foreach (var (appId, depot) in plan) {
 			foreach (var depotId in depot.Keys.Where(depotId => done.Add(depotId))) {
 				var keyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
@@ -251,6 +258,8 @@ internal static class Program {
 		var parallelOptions = new ParallelOptions {
 			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
 		};
+
+		Log.Information("Saving chunks to {Path}", output);
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
@@ -348,7 +357,7 @@ internal static class Program {
 			SteamContent.CDNAuthToken? cdnToken = null;
 
 			var attempts = client.Connections.Attempts;
-			var currentAttempt = attempts;
+			var currentAttempt = 0;
 			while (currentAttempt++ < attempts) {
 				try {
 					if (cdnToken != null && cdnToken.Expiration >= DateTime.Now) {
@@ -444,7 +453,7 @@ internal static class Program {
 			var parts = line.Split(',', 4, StringSplitOptions.TrimEntries);
 
 			if (!uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
-				Log.Error("Cannot parse line {Parts} (invalid app id)", line);
+				Log.Error("Cannot parse line {Parts} (invalid app id {id})", line, parts[0]);
 				continue;
 			}
 
@@ -454,10 +463,10 @@ internal static class Program {
 
 			switch (parts.Length) {
 				case > 1 when !uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out depotId):
-					Log.Error("Cannot parse line {Parts} (invalid depot id)", line);
+					Log.Error("Cannot parse line {Parts} (invalid depot id {id})", line, parts[1]);
 					continue;
 				case > 2 when !ulong.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out manifestId):
-					Log.Error("Cannot parse line {Parts} (invalid manifest id)", line);
+					Log.Error("Cannot parse line {Parts} (invalid manifest id {Id})", line, parts[2]);
 					continue;
 			}
 
