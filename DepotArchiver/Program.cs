@@ -356,8 +356,9 @@ internal static class Program {
 			var server = client.Connections.GetConnection();
 			SteamContent.CDNAuthToken? cdnToken = null;
 
-			var attempts = client.Connections.Attempts;
+			var attempts = client.Connections.Attempts * 2;
 			var currentAttempt = 0;
+			var isRetry = false;
 			while (currentAttempt++ < attempts) {
 				try {
 					if (cdnToken != null && cdnToken.Expiration >= DateTime.Now) {
@@ -366,21 +367,40 @@ internal static class Program {
 
 					var n = await client.Connections.Client.DownloadDepotChunkAsync(depotId, chunk, server, buffer, null, client.Connections.ProxyServer, cdnToken?.Token);
 					if (!ValidateChunk(depotKey, chunk, buffer.AsSpan(0, n))) {
+						if (isRetry) {
+							Log.Warning("Chunk {Id} failed validation twice, re-downloading from a different cdn", chunkId);
+							isRetry = false;
+							goto rotate;
+						}
+
 						Log.Warning("Chunk {Id} failed validation, re-downloading", chunkId);
-						continue;
+						goto retry;
 					}
 
-					await using var stream = new FileStream(chunkPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
-					stream.SetLength((int) chunk.CompressedLength);
-					stream.Position = 0;
-					stream.Write(buffer.AsSpan(0, n));
-					return;
+					{
+						await using var stream = new FileStream(chunkPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+						stream.SetLength((int) chunk.CompressedLength);
+						stream.Position = 0;
+						stream.Write(buffer.AsSpan(0, n));
+						return;
+					}
 				} catch (SteamKitWebRequestException ex) {
 					switch (ex.StatusCode) {
-						case HttpStatusCode.Forbidden when cdnToken == null:
+						case HttpStatusCode.Forbidden when cdnToken == null: {
 							cdnToken = await client.RequestAuthToken(appId, depotId, server);
-							continue;
-						case HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound:
+							goto retry;
+						}
+						case HttpStatusCode.NotFound when isRetry == false: {
+							// this will emit when the cdn isn't warm for this file.
+							Log.Error("Chunk {Id} for {DepotId} is not found, waiting one second...", chunkId, depotId);
+							await Task.Delay(TimeSpan.FromSeconds(1));
+							goto retry;
+						}
+						case HttpStatusCode.NotFound: {
+							Log.Error("Chunk {Id} for {DepotId} is not found, rotating servers", chunkId, depotId);
+							goto rotate;
+						}
+						case HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized:
 							if (Console.IsErrorRedirected) {
 								await Console.Error.WriteLineAsync(chunkId);
 							}
@@ -388,6 +408,8 @@ internal static class Program {
 							Log.Error("Cannot download chunk {Id} for {DepotId}, got {Code}", chunkId, depotId, ex.StatusCode);
 							return;
 					}
+
+					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers", chunkId, depotId, ex.StatusCode);
 				} catch (OperationCanceledException) {
 					if (Console.IsErrorRedirected) {
 						await Console.Error.WriteLineAsync(chunkId);
@@ -398,8 +420,14 @@ internal static class Program {
 					Log.Error(ex, "Chunk {Id} for {DepotId} failed, rotating servers...", chunkId, depotId);
 				}
 
+			rotate:
+				isRetry = false;
 				cdnToken = null;
 				server = client.Connections.ExchangeBrokenConnection(server);
+				continue;
+
+			retry:
+				isRetry = true;
 			}
 		} finally {
 			ArrayPool<byte>.Shared.Return(buffer);
