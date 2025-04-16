@@ -336,6 +336,10 @@ internal static class Program {
 			}
 
 			if (ProgramFlags.Instance.OnlyValidate) {
+				if (Console.IsErrorRedirected) {
+					await Console.Error.WriteLineAsync(chunkId);
+				}
+
 				Log.Warning("Chunk {Id} does not exist", chunkId);
 				return;
 			}
