@@ -44,6 +44,10 @@ internal static class Program {
 			return;
 		}
 
+		if (flags.OnlyValidate) {
+			flags.Validate = true;
+		}
+
 		using var client = new SteamSession(new SteamUser.LogOnDetails {
 			MachineName = $"{Environment.MachineName} (Archival)",
 			Username = flags.Username,
@@ -289,7 +293,7 @@ internal static class Program {
 										 .ToArray();
 
 					if (chunks.Length > 0) {
-						Log.Information("Beginning download of {Manifest} for {Depot} ({Size})", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
+						Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
 
 						var done = 0;
 						await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
@@ -297,7 +301,7 @@ internal static class Program {
 							Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
 						});
 
-						Log.Information("Downloaded {Total} new chunks", chunks.Length);
+						Log.Information("Processed {Total} new chunks", chunks.Length);
 					} else {
 						Log.Debug("Manifest has no new chunks");
 					}
@@ -324,10 +328,15 @@ internal static class Program {
 					return;
 				}
 
+				if (Console.IsErrorRedirected) {
+					await Console.Error.WriteLineAsync(chunkId);
+				}
+
 				Log.Warning("Chunk {Id} failed validation", chunkId);
 			}
 
 			if (ProgramFlags.Instance.OnlyValidate) {
+				Log.Warning("Chunk {Id} does not exist", chunkId);
 				return;
 			}
 
