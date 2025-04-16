@@ -333,15 +333,14 @@ internal static class Program {
 				}
 
 				Log.Warning("Chunk {Id} failed validation", chunkId);
-			} else if(ProgramFlags.Instance.Validate) {
+			}
+
+			if (ProgramFlags.Instance.OnlyValidate) {
 				if (Console.IsErrorRedirected) {
 					await Console.Error.WriteLineAsync(chunkId);
 				}
 
 				Log.Warning("Chunk {Id} does not exist", chunkId);
-			}
-
-			if (ProgramFlags.Instance.OnlyValidate) {
 				return;
 			}
 
