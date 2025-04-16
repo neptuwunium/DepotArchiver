@@ -204,6 +204,7 @@ internal sealed class SteamSession : IDisposable {
 				Log.Information("Logging '{Username}' into Steam3...", Details.Username);
 
 				var authData = new AuthSessionDetails {
+					DeviceFriendlyName = $"{Environment.MachineName} (Archival)",
 					Username = Details.Username,
 					Password = Details.Password,
 					IsPersistentSession = ProgramFlags.Instance.RememberPassword,
