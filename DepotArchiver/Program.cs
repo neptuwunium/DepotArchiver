@@ -429,6 +429,12 @@ internal static class Program {
 			retry:
 				isRetry = true;
 			}
+
+			if (Console.IsErrorRedirected) {
+				await Console.Error.WriteLineAsync(chunkId);
+			}
+
+			Log.Error("Chunk {Id} for {DepotId} failed, no valid cdns have this file", chunkId, depotId);
 		} finally {
 			ArrayPool<byte>.Shared.Return(buffer);
 		}
