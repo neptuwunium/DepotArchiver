@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Globalization;
+using System.Text.RegularExpressions;
 using DragonLib.CommandLine;
 
 namespace DepotUnarchiver;
@@ -15,6 +16,12 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("depots", Help = "the directory chunks are saved in")]
 	public string DepotDirectory { get; set; } = "depots";
+
+	[Flag("list", Help = "list files in the manifest")]
+	public bool List { get; set; }
+
+	[Flag("filter", Help = "only export files that match these regex filters", FileListPrefix = '@')]
+	public List<Regex> Filter { get; set; } = [];
 
 	[Flag("depot-id", Positional = 0, Help = "the depot id to unarchive", Extra = NumberStyles.Integer, IsRequired = true)]
 	public uint DepotId { get; set; }

@@ -55,7 +55,19 @@ internal static class Program {
 		var fileMaps = new List<MemoryMappedFile>();
 		var ops = new List<ChunkLoadOp>();
 
-		foreach (var file in manifest.Files) {
+		foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
+			if (flags.List) {
+				if ((file.Flags & EDepotFileFlag.Directory) == 0) {
+					if (Console.IsErrorRedirected) {
+						Console.Error.WriteLine(file.FileName);
+					} else {
+						Log.Information("{0}", file.FileName);
+					}
+				}
+
+				continue;
+			}
+
 			var dest = Path.Combine(flags.TargetDirectory, file.FileName);
 			if (string.IsNullOrEmpty(dest)) {
 				continue;
@@ -86,6 +98,9 @@ internal static class Program {
 				Directory.CreateDirectory(dest);
 				continue;
 			}
+
+			var directory = Path.GetDirectoryName(dest)!;
+			Directory.CreateDirectory(directory);
 
 			Log.Information("Allocating {Path}", dest);
 			var stream = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
