@@ -22,11 +22,14 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("token", Help = "the login token for the account", Env = "DEPOTARCHIVER_TOKEN")]
 	public string? Token { get; set; }
 
-	[Flag("plan", Positional = 0, Help = "path to appId,depotId,manifestId[,branch] csv plan file", IsRequired = true)]
+	[Flag("plan", Positional = 0, Help = "path to appId,depotId,manifestId,branch csv plan file, this can also be an app id", IsRequired = true)]
 	public string ArchivePlanFile { get; set; } = null!;
 
 	[Flag("depots", Help = "the directory to save chunks in")]
 	public string TargetDirectory { get; set; } = "depots";
+
+	[Flag("branch", Help = "the branch to download if no manifest ids are specified")]
+	public string Branch { get; set; } = "public";
 
 	[Flag("validate", Help = "validate all chunks for corruption")]
 	public bool Validate { get; set; }

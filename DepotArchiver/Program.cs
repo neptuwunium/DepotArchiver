@@ -89,7 +89,9 @@ internal static class Program {
 	}
 
 	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan) {
-		var pics = await client.Apps.PICSGetProductInfo(plan.Keys.Select(x => new SteamApps.PICSRequest(x, client.PackageTokens.GetValueOrDefault(x))), []);
+		var accessTokens = await client.Apps.PICSGetAccessTokens(plan.Keys, []);
+
+		var pics = await client.Apps.PICSGetProductInfo(plan.Keys.Select(x => new SteamApps.PICSRequest(x, accessTokens.AppTokens.GetValueOrDefault(x))), []);
 		if (pics.Failed || pics.Results == null) {
 			Log.Error("Could not get PICS data");
 			return;
@@ -103,6 +105,54 @@ internal static class Program {
 				var target = Path.Combine(output, appId.ToString("D", CultureInfo.InvariantCulture) + ".vdf");
 				Log.Information("Saved {Id}.vdf", appId);
 				app.KeyValues.SaveToFile(target, false);
+
+				await ListDepots(plan, appId, app);
+			}
+		}
+	}
+
+	private static async Task ListDepots(DepotPlan plan, uint appId, SteamApps.PICSProductInfoCallback.PICSProductInfo app) {
+		if (!plan.TryGetValue(appId, out var appPlan)) {
+			appPlan = []; // realistically should never happen
+		}
+
+		var isBlank = appPlan.Count == 0;
+
+		Log.Information("Available depots for app {AppId}", appId);
+		foreach (var depot in app.KeyValues.Children.Where(x => x.Name == "depots").FirstOrDefault(KeyValue.Invalid).Children) {
+			var manifests = depot["manifests"];
+
+			if (manifests.Children.Count == 0) {
+				continue;
+			}
+
+			foreach (var branch in manifests.Children) {
+				var gid = branch["gid"];
+
+				if (string.IsNullOrEmpty(gid.Value) || string.IsNullOrEmpty(depot.Name)) {
+					continue;
+				}
+
+				var depotId = uint.Parse(depot.Name);
+				var manifestId = ulong.Parse(gid.Value);
+
+				if (Console.IsErrorRedirected) {
+					await Console.Error.WriteLineAsync($"{appId},{depotId},{manifestId},{branch.Name}");
+				} else {
+					Log.Information("\t{AppId},{DepotId},{ManifestId},{Branch}", appId, depotId, manifestId, branch.Name);
+				}
+
+				if (!appPlan.TryGetValue(depotId, out var depotPlan)) {
+					if (!isBlank) {
+						continue;
+					}
+
+					depotPlan = appPlan[depotId] = [];
+				}
+
+				if (depotPlan.Count == 0 && branch.Name?.Equals(ProgramFlags.Instance.Branch, StringComparison.OrdinalIgnoreCase) == true) {
+					depotPlan[manifestId] = branch.Name;
+				}
 			}
 		}
 	}
@@ -337,10 +387,20 @@ internal static class Program {
 	}
 
 	private static async Task<DepotPlan> ParsePlan(ProgramFlags flags) {
+		var plan = new DepotPlan();
+		if (!File.Exists(flags.ArchivePlanFile)) {
+			if (uint.TryParse(flags.ArchivePlanFile, NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
+				plan[appId] = [];
+			} else {
+				Log.Error("Cannot open {Path}", flags.ArchivePlanFile);
+			}
+
+			return plan;
+		}
+
 		await using var stream = new FileStream(flags.ArchivePlanFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 		using var reader = new StreamReader(stream);
 
-		var plan = new DepotPlan();
 		while (await reader.ReadLineAsync() is { } line) {
 			var comment = line.IndexOf('#', StringComparison.Ordinal);
 			if (comment > -1) {
@@ -355,17 +415,38 @@ internal static class Program {
 
 			var parts = line.Split(',', 4, StringSplitOptions.TrimEntries);
 
-			var appId = uint.Parse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture);
-			var depotId = uint.Parse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture);
-			var manifestId = ulong.Parse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture);
+			if (!uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
+				Log.Error("Cannot parse line {Parts} (invalid app id)", line);
+				continue;
+			}
+
+			var depotId = 0u;
+			var manifestId = 0ul;
 			var branch = parts.ElementAtOrDefault(3) ?? "public";
+
+			switch (parts.Length) {
+				case > 1 when !uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out depotId):
+					Log.Error("Cannot parse line {Parts} (invalid depot id)", line);
+					continue;
+				case > 2 when !ulong.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out manifestId):
+					Log.Error("Cannot parse line {Parts} (invalid manifest id)", line);
+					continue;
+			}
 
 			if (!plan.TryGetValue(appId, out var app)) {
 				app = plan[appId] = [];
 			}
 
+			if (depotId == 0) {
+				continue;
+			}
+
 			if (!app.TryGetValue(depotId, out var depot)) {
 				depot = app[depotId] = [];
+			}
+
+			if (manifestId == 0) {
+				continue;
 			}
 
 			depot[manifestId] = branch;

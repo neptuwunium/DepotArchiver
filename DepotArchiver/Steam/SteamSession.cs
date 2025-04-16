@@ -16,7 +16,7 @@ namespace DepotArchiver.Steam;
 internal sealed class SteamSession : IDisposable {
 	internal SteamSession(SteamUser.LogOnDetails details) {
 		Details = details;
-		GotLicensesTCS = new TaskCompletionSource();
+		LoggedInTaskCompletionSource = new TaskCompletionSource();
 
 		var config = SteamConfiguration.Create(c => c.WithHttpClientFactory(() => {
 			var client = new HttpClient();
@@ -34,7 +34,6 @@ internal sealed class SteamSession : IDisposable {
 		Callbacks.Subscribe<SteamClient.ConnectedCallback>(ConnectedCallback);
 		Callbacks.Subscribe<SteamClient.DisconnectedCallback>(DisconnectedCallback);
 		Callbacks.Subscribe<SteamUser.LoggedOnCallback>(LogOnCallback);
-		Callbacks.Subscribe<SteamApps.LicenseListCallback>(LicenseListCallback);
 	}
 
 	public void TickCallbacks() {
@@ -43,9 +42,6 @@ internal sealed class SteamSession : IDisposable {
 		}
 	}
 
-
-	internal Dictionary<uint, ulong> AppTokens { get; } = [];
-	internal Dictionary<uint, ulong> PackageTokens { get; } = [];
 	internal Dictionary<uint, byte[]> DepotKeys { get; } = [];
 	internal ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
 	internal List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
@@ -68,8 +64,8 @@ internal sealed class SteamSession : IDisposable {
 	private bool IsConnectionRecovery { get; set; }
 	private int ConnectionBackoff { get; set; }
 	private AuthSession? AuthSession { get; set; }
-	private TaskCompletionSource GotLicensesTCS { get; set; }
-	public Task FullyLoggedInTask => GotLicensesTCS.Task;
+	private TaskCompletionSource LoggedInTaskCompletionSource { get; set; }
+	public Task FullyLoggedInTask => LoggedInTaskCompletionSource.Task;
 
 	public void Dispose() {
 		if (Aborted) {
@@ -180,7 +176,7 @@ internal sealed class SteamSession : IDisposable {
 		Aborted = true;
 		Connecting = false;
 		IsConnectionRecovery = false;
-		GotLicensesTCS.SetCanceled();
+		LoggedInTaskCompletionSource.SetCanceled();
 		Client.Disconnect();
 		Connections.Dispose();
 
@@ -220,12 +216,14 @@ internal sealed class SteamSession : IDisposable {
 					Details.Password = null;
 				}
 
-				try {
-					AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(authData);
-					await RefreshSession();
-				} catch (AuthenticationException ex) {
-					Log.Error(ex, "Failed to authenticate with steam");
-					Abort(false);
+				if (string.IsNullOrEmpty(Details.AccessToken)) {
+					try {
+						AuthSession = await Client.Authentication.BeginAuthSessionViaCredentialsAsync(authData);
+						await RefreshSession();
+					} catch (AuthenticationException ex) {
+						Log.Error(ex, "Failed to authenticate with steam");
+						Abort(false);
+					}
 				}
 
 				User.LogOn(Details);
@@ -318,39 +316,11 @@ internal sealed class SteamSession : IDisposable {
 
 			IsLoggedOn = true;
 			CellId = loggedOn.CellID;
-
-			if (!string.IsNullOrEmpty(Details.Username)) {
-				return;
-			}
-
-			// anonymous login won't get any licenses
-			GotLicensesTCS.SetResult();
-			GotLicensesTCS = new TaskCompletionSource();
+			LoggedInTaskCompletionSource.SetResult();
+			LoggedInTaskCompletionSource = new TaskCompletionSource();
 		} catch (Exception ex) {
 			Log.Error(ex, "Failed to authenticate with Steam");
 			Abort(false);
 		}
-	}
-
-	private void LicenseListCallback(SteamApps.LicenseListCallback licenseList) {
-		if (licenseList.Result != EResult.OK) {
-			Log.Error("Unable to get license list: {Result} ", licenseList.Result);
-			Abort();
-
-			return;
-		}
-
-		Log.Information("Got {Count} licenses for account!", licenseList.LicenseList.Count);
-		Licenses.Clear();
-		Licenses.AddRange(licenseList.LicenseList);
-
-		foreach (var license in licenseList.LicenseList) {
-			if (license.AccessToken > 0) {
-				PackageTokens.TryAdd(license.PackageID, license.AccessToken);
-			}
-		}
-
-		GotLicensesTCS.SetResult();
-		GotLicensesTCS = new TaskCompletionSource();
 	}
 }
