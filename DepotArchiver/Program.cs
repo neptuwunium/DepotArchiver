@@ -270,7 +270,7 @@ internal static class Program {
 				foreach (var (depotId, manifests) in depot) {
 					var depotPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture));
 					var depotKeyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
-					var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath) : null;
+					var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath, cts.Token) : null;
 					if (ProgramFlags.Instance.Validate && depotKey is not { Length: 32 }) {
 						Log.Warning("Depot key for {Depot} is missing or invalid, cannot validate", depotId);
 						depotKey = null;
