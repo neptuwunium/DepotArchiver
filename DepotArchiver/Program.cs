@@ -397,7 +397,7 @@ internal static class Program {
 					await using var stream = fileInfo.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 					var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
 					stream.ReadExactly(existing);
-					if (ValidateChunk(depotKey, chunk, existing)) {
+					if (ValidateChunk(depotKey, chunk, existing, ProgramFlags.Instance.Validate)) {
 						return false;
 					}
 
@@ -435,7 +435,7 @@ internal static class Program {
 					}
 
 					var n = await client.Connections.Client.DownloadDepotChunkAsync(depotId, chunk, server, buffer, null, client.Connections.ProxyServer, cdnToken?.Token);
-					if (!ValidateChunk(depotKey, chunk, buffer.AsSpan(0, n))) {
+					if (!ValidateChunk(depotKey, chunk, buffer.AsSpan(0, n), ProgramFlags.Instance.Validate || ProgramFlags.Instance.ValidateNew)) {
 						if (isRetry) {
 							Log.Warning("Chunk {Id} failed validation twice, re-downloading from a different cdn", chunkId);
 							isRetry = false;
@@ -514,8 +514,8 @@ internal static class Program {
 		return false;
 	}
 
-	private static bool ValidateChunk(byte[]? depotKey, DepotManifest.ChunkData chunk, Span<byte> buffer) {
-		if (!ProgramFlags.Instance.Validate || depotKey == null) {
+	private static bool ValidateChunk(byte[]? depotKey, DepotManifest.ChunkData chunk, Span<byte> buffer, bool should) {
+		if (!should || depotKey == null) {
 			return true;
 		}
 

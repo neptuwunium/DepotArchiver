@@ -34,6 +34,9 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("validate", Help = "validate all chunks for corruption")]
 	public bool Validate { get; set; }
 
+	[Flag("validate-new", Help = "validate new chunks for corruption")]
+	public bool ValidateNew { get; set; }
+
 	[Flag("no-app-info", Help = "do not fetch app info")]
 	public bool NoAppInfo { get; set; }
 
