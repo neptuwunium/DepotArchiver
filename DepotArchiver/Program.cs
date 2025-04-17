@@ -302,7 +302,7 @@ internal static class Program {
 
 						var chunks = manifest.Files
 											 .SelectMany(x => x.Chunks)
-											 .Where(x => ProgramFlags.Instance.Validate || !File.Exists(Path.Combine(depotPath, Convert.ToHexStringLower(x.ChunkID!))))
+											 .Where(x => ProgramFlags.Instance.Validate || ShouldDownloadChunk(depotPath, x))
 											 .Where(x => handled.Add(MemoryMarshal.Read<SHA1Hash>(x.ChunkID)))
 											 .ToArray();
 
@@ -327,9 +327,8 @@ internal static class Program {
 								}
 							});
 
-							Log.Information("Processed {Total} new chunks", chunks.Length);
-
 							if (!cts.IsCancellationRequested) {
+								Log.Information("Processed {Total} new chunks", chunks.Length);
 								continue;
 							}
 
@@ -359,6 +358,19 @@ internal static class Program {
 		}
 	}
 
+	private static bool ShouldDownloadChunk(string depotPath, DepotManifest.ChunkData chunk) {
+		var fileInfo = new FileInfo(Path.Combine(depotPath, Convert.ToHexStringLower(chunk.ChunkID!)));
+		if (!fileInfo.Exists) {
+			return true;
+		}
+
+		if (fileInfo.Length != chunk.CompressedLength) {
+			return true;
+		}
+
+		return false;
+	}
+
 	private static async Task<bool> FetchChunk(SteamSession client, string path, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
 		var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
 		var chunkPath = Path.Combine(path, chunkId);
@@ -366,22 +378,35 @@ internal static class Program {
 
 		try {
 			if (File.Exists(chunkPath)) {
+				var fileInfo = new FileInfo(chunkPath);
 				if (!ProgramFlags.Instance.Validate) {
+					if (fileInfo.Length == chunk.CompressedLength) {
+						return false;
+					}
+
+					if (Console.IsErrorRedirected) {
+						await Console.Error.WriteLineAsync(chunkId);
+					}
+
+					Log.Warning("Chunk {Id} is an invalid size", chunkId);
+				} else {
+					await using var stream = fileInfo.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+					var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
+					stream.ReadExactly(existing);
+					if (ValidateChunk(depotKey, chunk, existing)) {
+						return false;
+					}
+
+					if (Console.IsErrorRedirected) {
+						await Console.Error.WriteLineAsync(chunkId);
+					}
+
+					Log.Warning("Chunk {Id} failed validation", chunkId);
+				}
+
+				if (ProgramFlags.Instance.OnlyValidate) {
 					return false;
 				}
-
-				await using var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-				var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
-				stream.ReadExactly(existing);
-				if (ValidateChunk(depotKey, chunk, existing)) {
-					return false;
-				}
-
-				if (Console.IsErrorRedirected) {
-					await Console.Error.WriteLineAsync(chunkId);
-				}
-
-				Log.Warning("Chunk {Id} failed validation", chunkId);
 			}
 
 			if (ProgramFlags.Instance.OnlyValidate) {
