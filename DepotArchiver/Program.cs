@@ -255,11 +255,11 @@ internal static class Program {
 	private static async Task FetchChunks(SteamSession client, DepotPlan plan) {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
+		Log.Information("Saving chunks to {Path}", output);
 		var parallelOptions = new ParallelOptions {
 			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
 		};
-
-		Log.Information("Saving chunks to {Path}", output);
+		using var cts = new CancellationTokenSource();
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
@@ -306,20 +306,39 @@ internal static class Program {
 
 						var done = 0;
 						await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
-							await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
+							if (cts.IsCancellationRequested) {
+								return;
+							}
+
+							var exit = await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
 							Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
+
+							if (exit && !cts.IsCancellationRequested) {
+								try {
+									await cts.CancelAsync();
+								} catch {
+									// ignored
+								}
+							}
 						});
 
 						Log.Information("Processed {Total} new chunks", chunks.Length);
-					} else {
-						Log.Debug("Manifest has no new chunks");
+
+						if (!cts.IsCancellationRequested) {
+							continue;
+						}
+
+						Log.Fatal("Encountered an unrecoverable error, exiting so we don't potentially flood the CDN");
+						return;
 					}
+
+					Log.Debug("Manifest has no new chunks");
 				}
 			}
 		}
 	}
 
-	private static async Task FetchChunk(SteamSession client, string path, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
+	private static async Task<bool> FetchChunk(SteamSession client, string path, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
 		var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
 		var chunkPath = Path.Combine(path, chunkId);
 		var buffer = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
@@ -327,14 +346,14 @@ internal static class Program {
 		try {
 			if (File.Exists(chunkPath)) {
 				if (!ProgramFlags.Instance.Validate) {
-					return;
+					return false;
 				}
 
 				await using var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 				var existing = buffer.AsSpan(0, (int) chunk.CompressedLength);
 				stream.ReadExactly(existing);
 				if (ValidateChunk(depotKey, chunk, existing)) {
-					return;
+					return false;
 				}
 
 				if (Console.IsErrorRedirected) {
@@ -350,7 +369,7 @@ internal static class Program {
 				}
 
 				Log.Warning("Chunk {Id} does not exist", chunkId);
-				return;
+				return false;
 			}
 
 			var server = client.Connections.GetConnection();
@@ -382,7 +401,7 @@ internal static class Program {
 						stream.SetLength((int) chunk.CompressedLength);
 						stream.Position = 0;
 						stream.Write(buffer.AsSpan(0, n));
-						return;
+						return false;
 					}
 				} catch (SteamKitWebRequestException ex) {
 					switch (ex.StatusCode) {
@@ -406,7 +425,7 @@ internal static class Program {
 							}
 
 							Log.Error("Cannot download chunk {Id} for {DepotId}, got {Code}", chunkId, depotId, ex.StatusCode);
-							return;
+							return false;
 					}
 
 					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers", chunkId, depotId, ex.StatusCode);
@@ -415,7 +434,10 @@ internal static class Program {
 						await Console.Error.WriteLineAsync(chunkId);
 					}
 
-					return;
+					return false;
+				} catch (IOException ex) {
+					Log.Fatal(ex, "File System error while handling {Id} for {DepotId}", chunkId, depotId);
+					return true;
 				} catch (Exception ex) {
 					Log.Error(ex, "Chunk {Id} for {DepotId} failed, rotating servers...", chunkId, depotId);
 				}
@@ -438,6 +460,8 @@ internal static class Program {
 		} finally {
 			ArrayPool<byte>.Shared.Return(buffer);
 		}
+
+		return false;
 	}
 
 	private static bool ValidateChunk(byte[]? depotKey, DepotManifest.ChunkData chunk, Span<byte> buffer) {
