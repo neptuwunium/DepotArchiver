@@ -353,7 +353,11 @@ internal static class Program {
 				return;
 			}
 
-			cts.Cancel();
+			try {
+				cts.Cancel();
+			} catch {
+				// ignored
+			}
 			e.Cancel = true;
 		}
 	}
