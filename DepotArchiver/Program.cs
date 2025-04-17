@@ -4,6 +4,7 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -259,82 +260,102 @@ internal static class Program {
 		var parallelOptions = new ParallelOptions {
 			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
 		};
-		using var cts = new CancellationTokenSource();
 
-		foreach (var (appId, depot) in plan) {
-			foreach (var (depotId, manifests) in depot) {
-				var depotPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture));
-				var depotKeyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
-				var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath) : null;
-				if (ProgramFlags.Instance.Validate && depotKey is not { Length: 32 }) {
-					Log.Warning("Depot key for {Depot} is missing or invalid, cannot validate", depotId);
-					depotKey = null;
-				}
+		var cts = new CancellationTokenSource();
 
-				var manifestRootPath = Path.Combine(depotPath, "manifest");
-				Directory.CreateDirectory(depotPath);
-				Directory.CreateDirectory(manifestRootPath);
+		Console.CancelKeyPress += ConsoleOnCancelKeyPress;
 
-				var handled = new HashSet<SHA1Hash>();
-				foreach (var manifestId in manifests.Keys) {
-					var manifestPath = Path.Combine(manifestRootPath, manifestId.ToString("D", CultureInfo.InvariantCulture));
-					if (!File.Exists(manifestPath)) {
-						Log.Error("Manifest {ManifestId} for {Depot} was not saved!", manifestId, depotId);
-						continue;
+		try {
+			foreach (var (appId, depot) in plan) {
+				foreach (var (depotId, manifests) in depot) {
+					var depotPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture));
+					var depotKeyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
+					var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath) : null;
+					if (ProgramFlags.Instance.Validate && depotKey is not { Length: 32 }) {
+						Log.Warning("Depot key for {Depot} is missing or invalid, cannot validate", depotId);
+						depotKey = null;
 					}
 
-					var manifest = DepotManifest.LoadFromFile(manifestPath);
-					if (manifest == null) {
-						Log.Error("Manifest {ManifestId} for {Depot} failed to load!", manifestId, depotId);
-						continue;
-					}
+					var manifestRootPath = Path.Combine(depotPath, "manifest");
+					Directory.CreateDirectory(depotPath);
+					Directory.CreateDirectory(manifestRootPath);
 
-					if (manifest.Files == null || manifest.Files.Count == 0) {
-						continue;
-					}
-
-					await client.Connections.UpdateServerList(client.CellId);
-
-					var chunks = manifest.Files
-										 .SelectMany(x => x.Chunks)
-										 .Where(x => ProgramFlags.Instance.Validate || !File.Exists(Path.Combine(depotPath, Convert.ToHexStringLower(x.ChunkID!))))
-										 .Where(x => handled.Add(MemoryMarshal.Read<SHA1Hash>(x.ChunkID)))
-										 .ToArray();
-
-					if (chunks.Length > 0) {
-						Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
-
-						var done = 0;
-						await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
-							if (cts.IsCancellationRequested) {
-								return;
-							}
-
-							var exit = await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
-							Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
-
-							if (exit && !cts.IsCancellationRequested) {
-								try {
-									await cts.CancelAsync();
-								} catch {
-									// ignored
-								}
-							}
-						});
-
-						Log.Information("Processed {Total} new chunks", chunks.Length);
-
-						if (!cts.IsCancellationRequested) {
+					var handled = new HashSet<SHA1Hash>();
+					foreach (var manifestId in manifests.Keys) {
+						var manifestPath = Path.Combine(manifestRootPath, manifestId.ToString("D", CultureInfo.InvariantCulture));
+						if (!File.Exists(manifestPath)) {
+							Log.Error("Manifest {ManifestId} for {Depot} was not saved!", manifestId, depotId);
 							continue;
 						}
 
-						Log.Fatal("Encountered an unrecoverable error, exiting so we don't potentially flood the CDN");
-						return;
-					}
+						var manifest = DepotManifest.LoadFromFile(manifestPath);
+						if (manifest == null) {
+							Log.Error("Manifest {ManifestId} for {Depot} failed to load!", manifestId, depotId);
+							continue;
+						}
 
-					Log.Debug("Manifest has no new chunks");
+						if (manifest.Files == null || manifest.Files.Count == 0) {
+							continue;
+						}
+
+						await client.Connections.UpdateServerList(client.CellId);
+
+						var chunks = manifest.Files
+											 .SelectMany(x => x.Chunks)
+											 .Where(x => ProgramFlags.Instance.Validate || !File.Exists(Path.Combine(depotPath, Convert.ToHexStringLower(x.ChunkID!))))
+											 .Where(x => handled.Add(MemoryMarshal.Read<SHA1Hash>(x.ChunkID)))
+											 .ToArray();
+
+						if (chunks.Length > 0) {
+							Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
+
+							var done = 0;
+							await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
+								if (cts.IsCancellationRequested) {
+									return;
+								}
+
+								var exit = await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
+								Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
+
+								if (exit && !cts.IsCancellationRequested) {
+									try {
+										await cts.CancelAsync();
+									} catch {
+										// ignored
+									}
+								}
+							});
+
+							Log.Information("Processed {Total} new chunks", chunks.Length);
+
+							if (!cts.IsCancellationRequested) {
+								continue;
+							}
+
+							Log.Fatal("Encountered an unrecoverable error, exiting so we don't potentially flood the CDN");
+							return;
+						}
+
+						Log.Debug("Manifest has no new chunks");
+					}
 				}
 			}
+		} finally {
+			Console.CancelKeyPress -= ConsoleOnCancelKeyPress;
+			cts.Dispose();
+		}
+
+		return;
+
+		[SuppressMessage("ReSharper", "AccessToDisposedClosure")]
+		void ConsoleOnCancelKeyPress(object? sender, ConsoleCancelEventArgs e) {
+			if (cts.IsCancellationRequested) {
+				return;
+			}
+
+			cts.Cancel();
+			e.Cancel = true;
 		}
 	}
 
