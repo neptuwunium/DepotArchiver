@@ -479,8 +479,7 @@ internal static class Program {
 						case HttpStatusCode.NotFound when isRetry == false: {
 							// this will emit when the cdn isn't warm for this file.
 							Log.Error("Chunk {Id} for {DepotId} is not found, waiting one second...", chunkId, depotId);
-							await Task.Delay(TimeSpan.FromSeconds(1));
-							goto retry;
+							goto delay_retry;
 						}
 						case HttpStatusCode.NotFound: {
 							Log.Error("Chunk {Id} for {DepotId} is not found, rotating servers", chunkId, depotId);
@@ -497,11 +496,12 @@ internal static class Program {
 
 					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers", chunkId, depotId, ex.StatusCode);
 				} catch (OperationCanceledException) {
-					if (Console.IsErrorRedirected) {
-						await Console.Error.WriteLineAsync(chunkId);
+					if (!isRetry) {
+						Log.Error("Chunk {Id} for {DepotId} timed out, waiting one second...", chunkId, depotId);
+						goto delay_retry;
 					}
 
-					return false;
+					Log.Error("Chunk {Id} for {DepotId} timed out, rotating servers...", chunkId, depotId);
 				} catch (IOException ex) {
 					Log.Fatal(ex, "File System error while handling {Id} for {DepotId}", chunkId, depotId);
 					return true;
@@ -515,6 +515,8 @@ internal static class Program {
 				server = client.Connections.ExchangeBrokenConnection(server);
 				continue;
 
+			delay_retry:
+				await Task.Delay(TimeSpan.FromSeconds(1));
 			retry:
 				isRetry = true;
 			}
