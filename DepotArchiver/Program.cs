@@ -257,11 +257,12 @@ internal static class Program {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 		Log.Information("Saving chunks to {Path}", output);
-		var parallelOptions = new ParallelOptions {
-			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
-		};
 
 		var cts = new CancellationTokenSource();
+		var parallelOptions = new ParallelOptions {
+			MaxDegreeOfParallelism = ProgramFlags.Instance.Threads,
+			CancellationToken = cts.Token,
+		};
 
 		Console.CancelKeyPress += ConsoleOnCancelKeyPress;
 
@@ -310,19 +311,36 @@ internal static class Program {
 							Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
 
 							var done = 0;
-							await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, _) => {
+							await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, ct) => {
 								if (cts.IsCancellationRequested) {
 									return;
 								}
 
-								var exit = await FetchChunk(client, depotPath, appId, depotId, depotKey, chunk);
-								Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, Convert.ToHexStringLower(chunk.ChunkID!));
+								var attempt = 3;
+								while (attempt-- > 0) {
+									var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
+									var chunkPath = Path.Combine(depotPath, chunkId);
+									var exit = await FetchChunk(client, chunkPath, appId, depotId, depotKey, chunk);
+									if (exit && !cts.IsCancellationRequested) {
+										try {
+											await cts.CancelAsync();
+										} catch {
+											// ignored
+										}
 
-								if (exit && !cts.IsCancellationRequested) {
-									try {
-										await cts.CancelAsync();
-									} catch {
-										// ignored
+										return;
+									}
+
+									if (!File.Exists(chunkPath)) {
+										Log.Information("{Current} did not actually download? Retrying...", chunkId);
+										try {
+											await Task.Delay(TimeSpan.FromSeconds(1), ct);
+										} catch(TaskCanceledException) {
+											// ignored
+										}
+									} else {
+										Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, chunkId);
+										break;
 									}
 								}
 							});
@@ -358,6 +376,7 @@ internal static class Program {
 			} catch {
 				// ignored
 			}
+
 			e.Cancel = true;
 		}
 	}
@@ -375,9 +394,8 @@ internal static class Program {
 		return false;
 	}
 
-	private static async Task<bool> FetchChunk(SteamSession client, string path, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
+	private static async Task<bool> FetchChunk(SteamSession client, string chunkPath, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
 		var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
-		var chunkPath = Path.Combine(path, chunkId);
 		var buffer = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
 
 		try {
@@ -448,9 +466,8 @@ internal static class Program {
 
 					{
 						await using var stream = new FileStream(chunkPath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
-						stream.SetLength((int) chunk.CompressedLength);
-						stream.Position = 0;
-						stream.Write(buffer.AsSpan(0, n));
+						await stream.WriteAsync(buffer.AsMemory(0, n));
+						await stream.FlushAsync();
 						return false;
 					}
 				} catch (SteamKitWebRequestException ex) {
