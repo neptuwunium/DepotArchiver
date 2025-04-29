@@ -8,6 +8,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using DepotArchiver.Steam;
 using DragonLib;
 using Serilog;
@@ -21,8 +23,15 @@ using DepotPlan =
 			uint,
 			System.Collections.Generic.Dictionary<
 				ulong,
-				string
+				string?
 			>
+		>
+	>;
+using BranchPasswords =
+	System.Collections.Generic.Dictionary<
+		uint,
+		System.Collections.Generic.HashSet<
+			string
 		>
 	>;
 
@@ -39,7 +48,7 @@ internal static class Program {
 			return;
 		}
 
-		var plan = await ParsePlan(flags);
+		var (plan, passwords) = await ParsePlan(flags);
 		if (plan.Count == 0) {
 			Log.Error("Empty plan.");
 			return;
@@ -74,7 +83,7 @@ internal static class Program {
 		}
 
 		if (!flags.NoAppInfo) {
-			await FetchAppInfo(client, plan);
+			await FetchAppInfo(client, plan, passwords);
 		}
 
 		if (!flags.NoDepotKeys) {
@@ -93,7 +102,7 @@ internal static class Program {
 		loop.Join();
 	}
 
-	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan) {
+	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan, BranchPasswords passwords) {
 		var accessTokens = await client.Apps.PICSGetAccessTokens(plan.Keys, []);
 
 		var pics = await client.Apps.PICSGetProductInfo(plan.Keys.Select(x => new SteamApps.PICSRequest(x, accessTokens.AppTokens.GetValueOrDefault(x))), []);
@@ -109,6 +118,84 @@ internal static class Program {
 
 		foreach (var appInfo in pics.Results) {
 			foreach (var (appId, app) in appInfo.Apps) {
+				if (passwords.TryGetValue(appId, out var appPasswords)) {
+					var depots = app.KeyValues["depots"];
+					if (depots == KeyValue.Invalid) {
+						depots = app.KeyValues["depots"] = new KeyValue();
+					}
+
+					var branches = depots["branches"];
+					if (branches == KeyValue.Invalid) {
+						branches = app.KeyValues["branches"] = new KeyValue();
+					}
+
+					foreach (var appPassword in appPasswords) {
+						var appPasswordResponse = await client.Apps.CheckAppBetaPassword(appId, appPassword);
+						if (appPasswordResponse.Result != EResult.OK) {
+							Log.Error("Password {Password} (SHA:8) for {AppId} is invalid", Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(appPassword)))[..8], appId);
+							continue;
+						}
+
+						var done = new HashSet<string>();
+						foreach (var (branchName, appKey) in appPasswordResponse.BetaPasswords) {
+							if (!done.Add(branchName)) {
+								continue;
+							}
+
+							// is this key immutable?
+							var keyName = appId.ToString("D", CultureInfo.InvariantCulture) + $"_{branchName}.branchkey";
+							var keyTarget = Path.Combine(output, keyName);
+
+							await File.WriteAllBytesAsync(keyTarget, appKey);
+							Log.Information("Saved {KeyName}.branchkey", keyName);
+
+							var privateBeta = await client.Apps.PICSGetPrivateBeta(appId, accessTokens.AppTokens.GetValueOrDefault(appId), branchName, appKey);
+							if (privateBeta.Result != EResult.OK) {
+								Log.Error("Private Branch {Branch} for {AppId} is invalid", branchName, appId);
+								continue;
+							}
+
+							// merge branches
+							foreach (var kv in privateBeta.DepotSection["branches"].Children) {
+								if (kv.Name == null) {
+									continue;
+								}
+
+								if (branches[kv.Name] == KeyValue.Invalid) {
+									branches[kv.Name] = kv;
+								}
+							}
+
+							// merge depots
+							foreach (var kv in privateBeta.DepotSection.Children) {
+								if (kv.Name is null or "branches") {
+									continue;
+								}
+
+								if (depots[kv.Name] == KeyValue.Invalid) {
+									depots[kv.Name] = kv;
+									continue;
+								}
+
+								var depot = depots[kv.Name];
+								var manifests = depot["manifests"];
+								if (manifests == KeyValue.Invalid) {
+									depot["manifests"] = kv["manifests"];
+									continue;
+								}
+
+								foreach (var manifestKv in kv["manifests"].Children) {
+									if (manifestKv.Name == null || manifests[manifestKv.Name] != KeyValue.Invalid) {
+										continue;
+									}
+
+									manifests[manifestKv.Name] = manifestKv;
+								}
+							}
+						}
+					}
+				}
+
 				var target = Path.Combine(output, appId.ToString("D", CultureInfo.InvariantCulture) + ".vdf");
 				Log.Information("Saved {Id}.vdf", appId);
 				app.KeyValues.SaveToFile(target, false);
@@ -124,6 +211,7 @@ internal static class Program {
 		}
 
 		var isBlank = appPlan.Count == 0;
+		var wildcardDepots = new HashSet<uint>();
 
 		Log.Information("Available depots for app {AppId}", appId);
 		foreach (var depot in app.KeyValues.Children.Where(x => x.Name == "depots").FirstOrDefault(KeyValue.Invalid).Children) {
@@ -157,11 +245,19 @@ internal static class Program {
 					depotPlan = appPlan[depotId] = [];
 				}
 
-				if (depotPlan.Count == 0 && branch.Name?.Equals(ProgramFlags.Instance.Branch, StringComparison.OrdinalIgnoreCase) == true) {
-					depotPlan[manifestId] = branch.Name;
+				if (depotPlan.Count > 0 && !wildcardDepots.Contains(depotId)) {
+					continue;
 				}
+
+				wildcardDepots.Add(depotId);
+				depotPlan[manifestId] = ProgramFlags.Instance.Branches.Count > 0 ? null : branch.Name;
 			}
 		}
+	}
+
+	private class ContentContext(SteamContent.CDNAuthToken? token, Server server) {
+		public SteamContent.CDNAuthToken? Token { get; set; } = token;
+		public Server Server { get; set; } = server;
 	}
 
 	private static async Task FetchManifests(SteamSession client, DepotPlan plan) {
@@ -175,9 +271,9 @@ internal static class Program {
 				var manifestRootPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
 				Directory.CreateDirectory(manifestRootPath);
 
-				SteamContent.CDNAuthToken? cdnToken = null;
-				var server = client.Connections.GetConnection();
-				foreach (var (manifestId, branch) in manifests) {
+				var cdn = new ContentContext(null, client.Connections.GetConnection());
+				foreach (var pair in manifests) {
+					var (manifestId, branch) = pair;
 					if (!done.Add((depotId, manifestId))) {
 						continue;
 					}
@@ -187,40 +283,57 @@ internal static class Program {
 						continue;
 					}
 
-					var token = await client.GetDepotManifestRequestCodeAsync(appId, depotId, manifestId, branch);
-
-					while (true) {
-						try {
-							if (cdnToken != null && cdnToken.Expiration >= DateTime.Now) {
-								cdnToken = await client.RequestAuthToken(appId, depotId, server);
+					if (string.IsNullOrEmpty(branch)) {
+						if (ProgramFlags.Instance.Branches.Count > 0) {
+							foreach (var selectedBranch in ProgramFlags.Instance.Branches) {
+								await FetchBranchManifest(client, appId, depotId, manifestId, selectedBranch, manifestPath, cdn);
 							}
-
-							// no intro wants it in a zip file with one file named "z"
-							var manifest = await client.Connections.Client.DownloadManifestAsync(depotId, manifestId, token, server, null, client.Connections.ProxyServer, cdnToken?.Token);
-							manifest.SaveToFile(manifestPath);
-							Log.Information("Saved depots/{DepotId}/manifests/{ManifestId}", depotId, manifestId);
-							break;
-						} catch (SteamKitWebRequestException ex) {
-							if (ex.StatusCode == HttpStatusCode.Forbidden && cdnToken == null) {
-								cdnToken = await client.RequestAuthToken(appId, depotId, server);
-								continue;
-							}
-
-							if (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound) {
-								Log.Error("Cannot download manifest {Id} for {DepotId}, got {Code}", manifestId, depotId, ex.StatusCode);
-								break;
-							}
-						} catch (OperationCanceledException) {
-							break;
-						} catch (Exception ex) {
-							Log.Error(ex, "Manifest download {Id} for {DepotId} failed, rotating servers...", manifestId, depotId);
+							continue;
 						}
 
-						cdnToken = null;
-						server = client.Connections.ExchangeBrokenConnection(server);
+						// realistically should never happen.
+						branch = "public";
+						Log.Warning("No branch for {Manifest} in {Depot}, falling back to {Branch}", depotId, manifestId, branch);
 					}
+
+					await FetchBranchManifest(client, appId, depotId, manifestId, branch, manifestPath, cdn);
 				}
 			}
+		}
+	}
+
+	private static async Task FetchBranchManifest(SteamSession client, uint appId, uint depotId, ulong manifestId, string branch, string manifestPath, ContentContext cdn) {
+		var token = await client.GetDepotManifestRequestCodeAsync(appId, depotId, manifestId, branch);
+
+		while (true) {
+			try {
+				if (cdn.Token != null && cdn.Token.Expiration >= DateTime.Now) {
+					cdn.Token = await client.RequestAuthToken(appId, depotId, cdn.Server);
+				}
+
+				// no intro wants it in a zip file with one file named "z"
+				var manifest = await client.Connections.Client.DownloadManifestAsync(depotId, manifestId, token, cdn.Server, null, client.Connections.ProxyServer, cdn.Token?.Token);
+				manifest.SaveToFile(manifestPath);
+				Log.Information("Saved depots/{DepotId}/manifests/{ManifestId}", depotId, manifestId);
+				break;
+			} catch (SteamKitWebRequestException ex) {
+				if (ex.StatusCode == HttpStatusCode.Forbidden && cdn.Token == null) {
+					cdn.Token = await client.RequestAuthToken(appId, depotId, cdn.Server);
+					continue;
+				}
+
+				if (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound) {
+					Log.Error("Cannot download manifest {Id} for {DepotId}, got {Code}", manifestId, depotId, ex.StatusCode);
+					break;
+				}
+			} catch (OperationCanceledException) {
+				break;
+			} catch (Exception ex) {
+				Log.Error(ex, "Manifest download {Id} for {DepotId} failed, rotating servers...", manifestId, depotId);
+			}
+
+			cdn.Token = null;
+			cdn.Server = client.Connections.ExchangeBrokenConnection(cdn.Server);
 		}
 	}
 
@@ -335,7 +448,7 @@ internal static class Program {
 										Log.Information("{Current} did not actually download? Retrying...", chunkId);
 										try {
 											await Task.Delay(TimeSpan.FromSeconds(1), ct);
-										} catch(TaskCanceledException) {
+										} catch (TaskCanceledException) {
 											// ignored
 										}
 									} else {
@@ -550,8 +663,9 @@ internal static class Program {
 		return true;
 	}
 
-	private static async Task<DepotPlan> ParsePlan(ProgramFlags flags) {
+	private static async Task<(DepotPlan, BranchPasswords)> ParsePlan(ProgramFlags flags) {
 		var plan = new DepotPlan();
+		var passwords = new BranchPasswords();
 		if (!File.Exists(flags.ArchivePlanFile)) {
 			if (uint.TryParse(flags.ArchivePlanFile, NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
 				plan[appId] = [];
@@ -559,7 +673,7 @@ internal static class Program {
 				Log.Error("Cannot open {Path}", flags.ArchivePlanFile);
 			}
 
-			return plan;
+			return (plan, passwords);
 		}
 
 		await using var stream = new FileStream(flags.ArchivePlanFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -581,6 +695,15 @@ internal static class Program {
 
 			if (!uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
 				Log.Error("Cannot parse line {Parts} (invalid app id {id})", line, parts[0]);
+				continue;
+			}
+
+			if (parts is [_, "password", _]) {
+				if (!passwords.TryGetValue(appId, out var appPasswords)) {
+					appPasswords = passwords[appId] = [];
+				}
+
+				appPasswords.Add(parts[2]);
 				continue;
 			}
 
@@ -616,6 +739,6 @@ internal static class Program {
 			depot[manifestId] = branch;
 		}
 
-		return plan;
+		return (plan, passwords);
 	}
 }

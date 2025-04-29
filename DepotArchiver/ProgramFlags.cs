@@ -3,12 +3,24 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Globalization;
+using System.Reflection;
 using DragonLib.CommandLine;
 
 namespace DepotArchiver;
 
 internal record ProgramFlags : CommandLineFlags {
-	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>();
+	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(CommandLineOptions.Default with { HelpDelegate = PrintHelp });
+
+	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
+		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
+		Console.WriteLine("CSV Format:");
+		Console.WriteLine("\tLines starting with # are ignored");
+		Console.WriteLine("\tappId,depotId,manifestId,branch");
+		Console.WriteLine("\texample: 440,440,7561350075549843378,public");
+		Console.WriteLine("If the depot id is exactly \"password\" then the syntax changes a bit:");
+		Console.WriteLine("\tappId,password,branchPassword");
+		Console.WriteLine("\texample: 440,password,super-secret-password");
+	}
 
 	[Flag("remember-password", Help = "remember password when logging in", Env = "DEPOTARCHIVER_REMEMBER_PASSWORD")]
 	public bool RememberPassword { get; set; }
@@ -22,14 +34,14 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("token", Help = "the login token for the account", Env = "DEPOTARCHIVER_TOKEN")]
 	public string? Token { get; set; }
 
-	[Flag("plan", Positional = 0, Help = "path to appId,depotId,manifestId,branch csv plan file, this can also be an app id", IsRequired = true)]
+	[Flag("plan", Positional = 0, Help = "path to csv plan file, this can also be an app id.", IsRequired = true)]
 	public string ArchivePlanFile { get; set; } = null!;
 
 	[Flag("depots", Help = "the directory to save chunks in")]
 	public string TargetDirectory { get; set; } = "depots";
 
 	[Flag("branch", Help = "the branch to download if no manifest ids are specified")]
-	public string Branch { get; set; } = "public";
+	public List<string> Branches { get; set; } = [];
 
 	[Flag("validate", Help = "validate all chunks for corruption")]
 	public bool Validate { get; set; }
