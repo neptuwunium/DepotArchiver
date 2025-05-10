@@ -11,17 +11,6 @@ namespace DepotArchiver;
 internal record ProgramFlags : CommandLineFlags {
 	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(CommandLineOptions.Default with { HelpDelegate = PrintHelp });
 
-	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
-		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
-		Console.WriteLine("CSV Format:");
-		Console.WriteLine("\tLines starting with # are ignored");
-		Console.WriteLine("\tappId,depotId,manifestId,branch");
-		Console.WriteLine("\texample: 440,440,7561350075549843378,public");
-		Console.WriteLine("If the depot id is exactly \"password\" then the syntax changes a bit:");
-		Console.WriteLine("\tappId,password,branchPassword");
-		Console.WriteLine("\texample: 440,password,super-secret-password");
-	}
-
 	[Flag("remember-password", Help = "remember password when logging in", Env = "DEPOTARCHIVER_REMEMBER_PASSWORD")]
 	public bool RememberPassword { get; set; }
 
@@ -69,4 +58,15 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("login-id", Extra = NumberStyles.Integer | NumberStyles.AllowHexSpecifier, Help = "the unique login id for login session tracking")]
 	public uint? LoginId { get; set; }
+
+	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
+		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
+		Console.WriteLine("CSV Format:");
+		Console.WriteLine("\tLines starting with # are ignored");
+		Console.WriteLine("\tappId,depotId,manifestId,branch");
+		Console.WriteLine("\texample: 440,440,7561350075549843378,public");
+		Console.WriteLine("If the depot id is exactly \"password\" then the syntax changes a bit:");
+		Console.WriteLine("\tappId,password,branchPassword");
+		Console.WriteLine("\texample: 440,password,super-secret-password");
+	}
 }

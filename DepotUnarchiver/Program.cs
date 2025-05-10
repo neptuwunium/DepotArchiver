@@ -15,8 +15,6 @@ using SteamKit2.CDN;
 namespace DepotUnarchiver;
 
 internal static class Program {
-	private record ChunkLoadOp(MemoryMappedFile File, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
-
 	private static void Main() {
 		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
 
@@ -152,4 +150,6 @@ internal static class Program {
 			ArrayPool<byte>.Shared.Return(uncompressed);
 		}
 	}
+
+	private record ChunkLoadOp(MemoryMappedFile File, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
 }

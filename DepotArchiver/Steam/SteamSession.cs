@@ -36,12 +36,6 @@ internal sealed class SteamSession : IDisposable {
 		Callbacks.Subscribe<SteamUser.LoggedOnCallback>(LogOnCallback);
 	}
 
-	public void TickCallbacks() {
-		while (!Aborted) {
-			Callbacks.RunWaitCallbacks(TimeSpan.FromMilliseconds(100));
-		}
-	}
-
 	internal Dictionary<uint, byte[]> DepotKeys { get; } = [];
 	internal ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
 	internal List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
@@ -73,6 +67,12 @@ internal sealed class SteamSession : IDisposable {
 		}
 
 		Disconnect();
+	}
+
+	public void TickCallbacks() {
+		while (!Aborted) {
+			Callbacks.RunWaitCallbacks(TimeSpan.FromMilliseconds(100));
+		}
 	}
 
 	public async Task<byte[]?> RequestDepotKey(uint depotId, uint appid = 0) {

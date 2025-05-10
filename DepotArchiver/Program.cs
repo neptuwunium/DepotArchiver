@@ -16,24 +16,19 @@ using Serilog;
 using Serilog.Events;
 using SteamKit2;
 using SteamKit2.CDN;
-using DepotPlan =
-	System.Collections.Generic.Dictionary<
-		uint,
-		System.Collections.Generic.Dictionary<
-			uint,
-			System.Collections.Generic.Dictionary<
-				ulong,
-				string?
-			>
+using DepotPlan = System.Collections.Generic.Dictionary<
+	uint, System.Collections.Generic.Dictionary<
+		uint, System.Collections.Generic.Dictionary<
+			ulong,
+			string?
 		>
-	>;
-using BranchPasswords =
-	System.Collections.Generic.Dictionary<
-		uint,
-		System.Collections.Generic.HashSet<
-			string
-		>
-	>;
+	>
+>;
+using BranchPasswords = System.Collections.Generic.Dictionary<
+	uint, System.Collections.Generic.HashSet<
+		string
+	>
+>;
 
 namespace DepotArchiver;
 
@@ -255,11 +250,6 @@ internal static class Program {
 		}
 	}
 
-	private class ContentContext(SteamContent.CDNAuthToken? token, Server server) {
-		public SteamContent.CDNAuthToken? Token { get; set; } = token;
-		public Server Server { get; set; } = server;
-	}
-
 	private static async Task FetchManifests(SteamSession client, DepotPlan plan) {
 		var done = new HashSet<(uint, ulong)>();
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
@@ -288,6 +278,7 @@ internal static class Program {
 							foreach (var selectedBranch in ProgramFlags.Instance.Branches) {
 								await FetchBranchManifest(client, appId, depotId, manifestId, selectedBranch, manifestPath, cdn);
 							}
+
 							continue;
 						}
 
@@ -740,5 +731,10 @@ internal static class Program {
 		}
 
 		return (plan, passwords);
+	}
+
+	private class ContentContext(SteamContent.CDNAuthToken? token, Server server) {
+		public SteamContent.CDNAuthToken? Token { get; set; } = token;
+		public Server Server { get; set; } = server;
 	}
 }

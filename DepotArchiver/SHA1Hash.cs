@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace DepotArchiver;
 
-[StructLayout(LayoutKind.Sequential, Pack = 1), InlineArray(20)]
+[StructLayout(LayoutKind.Sequential, Pack = 1)] [InlineArray(20)]
 internal struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 	public byte Value;
 
