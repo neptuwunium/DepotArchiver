@@ -112,7 +112,7 @@ internal static class Program {
 					continue;
 				}
 
-				var chunkPath = Path.Combine(depotPath, Convert.ToHexStringLower(chunk.ChunkID));
+				var chunkPath = Path.Combine(depotPath, Convert.ToHexString(chunk.ChunkID).ToLowerInvariant());
 				ops.Add(new ChunkLoadOp(memoryMappedFile, chunk, chunkPath, depotKey));
 			}
 		}

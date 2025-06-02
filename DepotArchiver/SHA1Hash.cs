@@ -22,5 +22,5 @@ internal struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 		return hashCode.ToHashCode();
 	}
 
-	public override string ToString() => Convert.ToHexStringLower(this);
+	public override string ToString() => Convert.ToHexString(this).ToLowerInvariant();
 }

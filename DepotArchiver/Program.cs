@@ -139,7 +139,7 @@ internal static class Program {
 					foreach (var appPassword in appPasswords) {
 						var appPasswordResponse = await client.Apps.CheckAppBetaPassword(appId, appPassword);
 						if (appPasswordResponse.Result != EResult.OK) {
-							Log.Error("Password {Password} (SHA:8) for {AppId} is invalid", Convert.ToHexStringLower(SHA1.HashData(Encoding.UTF8.GetBytes(appPassword)))[..8], appId);
+							Log.Error("Password {Password} (SHA:8) for {AppId} is invalid", Convert.ToHexString(SHA1.HashData(Encoding.UTF8.GetBytes(appPassword)))[..8].ToLowerInvariant(), appId);
 							continue;
 						}
 
@@ -434,7 +434,7 @@ internal static class Program {
 
 								var attempt = 3;
 								while (attempt-- > 0) {
-									var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
+									var chunkId = Convert.ToHexString(chunk.ChunkID!).ToLowerInvariant();
 									var chunkPath = Path.Combine(depotPath, chunkId);
 									var exit = await FetchChunk(client, chunkPath, appId, depotId, depotKey, chunk);
 									if (exit && !cts.IsCancellationRequested) {
@@ -498,7 +498,7 @@ internal static class Program {
 	}
 
 	private static bool ShouldDownloadChunk(string depotPath, DepotManifest.ChunkData chunk) {
-		var fileInfo = new FileInfo(Path.Combine(depotPath, Convert.ToHexStringLower(chunk.ChunkID!)));
+		var fileInfo = new FileInfo(Path.Combine(depotPath, Convert.ToHexString(chunk.ChunkID!).ToLowerInvariant()));
 		if (!fileInfo.Exists) {
 			return true;
 		}
@@ -511,7 +511,7 @@ internal static class Program {
 	}
 
 	private static async Task<bool> FetchChunk(SteamSession client, string chunkPath, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
-		var chunkId = Convert.ToHexStringLower(chunk.ChunkID!);
+		var chunkId = Convert.ToHexString(chunk.ChunkID!).ToLowerInvariant();
 		var buffer = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
 
 		try {
