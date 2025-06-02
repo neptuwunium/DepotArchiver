@@ -93,7 +93,14 @@ internal static class Program {
 			await FetchChunks(client, plan);
 		}
 
-		client.Disconnect();
+		try {
+			client.Disconnect();
+		} catch(Exception e) {
+			Log.Warning(e, "Crashed while exiting?");
+			Environment.Exit(0);
+			// what
+		}
+
 		loop.Join();
 	}
 

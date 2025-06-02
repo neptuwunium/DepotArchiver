@@ -145,7 +145,7 @@ internal sealed class SteamSession : IDisposable {
 		Log.Debug("Got CDN auth token for {Host} ({Result}, expires {Expiration})", server.Host, cdnAuth.Result, cdnAuth.Expiration);
 
 		result = cdnAuth.Result != EResult.OK ? null : cdnAuth;
-		completion.SetResult(result);
+		completion.TrySetResult(result);
 		return result;
 	}
 
@@ -176,7 +176,7 @@ internal sealed class SteamSession : IDisposable {
 		Aborted = true;
 		Connecting = false;
 		IsConnectionRecovery = false;
-		LoggedInTaskCompletionSource.SetCanceled();
+		LoggedInTaskCompletionSource.TrySetCanceled();
 		Client.Disconnect();
 		Connections.Dispose();
 
@@ -317,7 +317,7 @@ internal sealed class SteamSession : IDisposable {
 
 			IsLoggedOn = true;
 			CellId = loggedOn.CellID;
-			LoggedInTaskCompletionSource.SetResult();
+			LoggedInTaskCompletionSource.TrySetResult();
 			LoggedInTaskCompletionSource = new TaskCompletionSource();
 		} catch (Exception ex) {
 			Log.Error(ex, "Failed to authenticate with Steam");
