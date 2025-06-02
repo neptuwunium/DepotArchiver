@@ -53,6 +53,11 @@ internal static class Program {
 			flags.Validate = true;
 		}
 
+		if (flags.NoAppInfo && plan.Any(x => x.Value.Count == 0)) {
+			Log.Error("Enabling App Info retrieval since we are missing depot ids...");
+			flags.NoAppInfo = false;
+		}
+
 		using var client = new SteamSession(new SteamUser.LogOnDetails {
 			MachineName = $"{Environment.MachineName} (Archival)",
 			Username = flags.Username,
