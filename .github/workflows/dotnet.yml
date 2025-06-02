@@ -6,24 +6,24 @@ name: Build
 on: [ push ]
 jobs:
     build:
-        name: "Build [${{ matrix.os }}]"
+        name: "Build [${{ matrix.rid }}]"
         strategy:
             matrix:
-                os: [ ubuntu-latest, macos-latest, windows-latest ]
-        runs-on: ${{ matrix.os }}
+                rid: [ linux-x64, linux-musl-x64, linux-arm64, linux-musl-arm64, osx-arm64, osx-x64, win-x64 ]
+        runs-on: ubuntu-latest
         steps:
             -   uses: actions/checkout@v4
                 with:
                     fetch-depth: 0
                     submodules: 'recursive'
             -   uses: actions/setup-dotnet@v4
-            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Runtime -f net9.0
-            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Standalone -f net9.0 --sc
+            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Runtime/${{matrix.rid}} -f net9.0 -r ${{ matrix.rid }}
+            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Standalone/${{matrix.rid}} -f net9.0 -r ${{ matrix.rid }} --sc
             -   uses: actions/upload-artifact@v4
                 with:
-                    name: DepotArchiver-${{ matrix.os }}
-                    path: Publish/DepotArchiver-Runtime
+                    name: DepotArchiver-${{ matrix.rid }}
+                    path: Publish/DepotArchiver-Runtime/${{matrix.rid}}
             -   uses: actions/upload-artifact@v4
                 with:
-                    name: DepotArchiver-${{ matrix.os }}-Standalone
-                    path: Publish/DepotArchiver-Standalone
+                    name: DepotArchiver-${{ matrix.rid }}-Standalone
+                    path: Publish/DepotArchiver-Standalone/${{matrix.rid}}
