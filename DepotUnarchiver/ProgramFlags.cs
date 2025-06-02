@@ -26,9 +26,12 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("depot-id", Positional = 0, Help = "the depot id to unarchive", Extra = NumberStyles.Integer, IsRequired = true)]
 	public uint DepotId { get; set; }
 
-	[Flag("manifest-id", Positional = 1, Help = "the manifest id to unarchive", Extra = NumberStyles.Integer, IsRequired = true)]
-	public ulong ManifestId { get; set; }
+	[Flag("manifest-id", Positional = 1, Help = "the manifest id to unarchive", Extra = NumberStyles.Integer)]
+	public HashSet<ulong> ManifestIds { get; set; } = [];
 
 	[Flag("threads", Help = "number of threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
+
+	[Flag("append-manifest-id", Help = "Append the manifest id to the file path")]
+	public bool AppendManifest { get; set; }
 }

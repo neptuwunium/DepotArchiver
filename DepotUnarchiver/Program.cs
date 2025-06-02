@@ -22,7 +22,22 @@ internal static class Program {
 
 		var depotPath = Path.Combine(Path.GetFullPath(flags.DepotDirectory), flags.DepotId.ToString("D", CultureInfo.InvariantCulture));
 		var depotKeyPath = Path.Combine(Path.GetFullPath(flags.DepotDirectory), flags.DepotId.ToString("D", CultureInfo.InvariantCulture) + ".depotkey");
-		var manifestPath = Path.Combine(depotPath, "manifest", flags.ManifestId.ToString("D", CultureInfo.InvariantCulture));
+		var manifestsPath = Path.Combine(depotPath, "manifest");
+
+		if (flags.ManifestIds.Count == 0) {
+			foreach (var manifestId in Directory.EnumerateFiles(manifestsPath, "*", SearchOption.TopDirectoryOnly)) {
+				flags.ManifestIds.Add(ulong.Parse(Path.GetFileName(manifestId), NumberStyles.Integer));
+			}
+		}
+
+		foreach (var manifestId in flags.ManifestIds) {
+			ProcessManifest(manifestsPath, manifestId, depotKeyPath, flags, depotPath);
+		}
+	}
+
+	private static void ProcessManifest(string manifestsPath, ulong manifestId, string depotKeyPath, ProgramFlags flags, string depotPath) {
+		var manifestIdStr = manifestId.ToString("D", CultureInfo.InvariantCulture);
+		var manifestPath = Path.Combine(manifestsPath, manifestIdStr);
 
 		var manifest = DepotManifest.LoadFromFile(manifestPath);
 		if (manifest == null) {
@@ -53,6 +68,8 @@ internal static class Program {
 		var fileMaps = new List<MemoryMappedFile>();
 		var ops = new List<ChunkLoadOp>();
 
+		var targetDirectory = flags.AppendManifest ? Path.Combine(flags.TargetDirectory, manifestIdStr) : flags.TargetDirectory;
+
 		foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
 			if (flags.List) {
 				if ((file.Flags & EDepotFileFlag.Directory) == 0) {
@@ -66,7 +83,7 @@ internal static class Program {
 				continue;
 			}
 
-			var dest = Path.Combine(flags.TargetDirectory, file.FileName);
+			var dest = Path.Combine(targetDirectory, file.FileName);
 			if (string.IsNullOrEmpty(dest)) {
 				continue;
 			}
@@ -76,7 +93,7 @@ internal static class Program {
 					continue;
 				}
 
-				var src = Path.Combine(flags.TargetDirectory, file.LinkTarget);
+				var src = Path.Combine(targetDirectory, file.LinkTarget);
 
 				if (string.IsNullOrEmpty(src)) {
 					continue;
@@ -151,5 +168,6 @@ internal static class Program {
 		}
 	}
 
+	// todo: make MemoryMappedFile a list so the chunk is decompressed only once.
 	private record ChunkLoadOp(MemoryMappedFile File, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
 }
