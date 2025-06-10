@@ -5,9 +5,9 @@
 using Serilog;
 using SteamKit2.Authentication;
 
-namespace DepotArchiver.Steam;
+namespace DepotCommon.Steam;
 
-internal class Authenticator : IAuthenticator {
+public class Authenticator : IAuthenticator {
 	public Task<string> GetDeviceCodeAsync(bool previousCodeWasIncorrect) {
 		if (previousCodeWasIncorrect) {
 			Log.Error("The previous 2-factor auth code you have provided is incorrect");

@@ -11,11 +11,12 @@ using SteamKit2;
 using SteamKit2.Authentication;
 using SteamKit2.CDN;
 
-namespace DepotArchiver.Steam;
+namespace DepotCommon.Steam;
 
-internal sealed class SteamSession : IDisposable {
-	internal SteamSession(SteamUser.LogOnDetails details) {
+public sealed class SteamSession : IDisposable {
+	public SteamSession(SteamUser.LogOnDetails details) {
 		Details = details;
+		RememberPassword = details.ShouldRememberPassword;
 		LoggedInTaskCompletionSource = new TaskCompletionSource();
 
 		var config = SteamConfiguration.Create(c => c.WithHttpClientFactory(() => {
@@ -36,20 +37,22 @@ internal sealed class SteamSession : IDisposable {
 		Callbacks.Subscribe<SteamUser.LoggedOnCallback>(LogOnCallback);
 	}
 
-	internal Dictionary<uint, byte[]> DepotKeys { get; } = [];
-	internal ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
-	internal List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
+	public static bool RememberPassword { get; set; }
 
-	internal SteamClient Client { get; set; }
-	internal SteamUser User { get; set; }
-	internal SteamContent Content { get; set; }
-	internal SteamApps Apps { get; set; }
-	internal CallbackManager Callbacks { get; set; }
-	internal ConnectionPool Connections { get; set; }
-	internal SteamUser.LogOnDetails Details { get; }
+	public Dictionary<uint, byte[]> DepotKeys { get; } = [];
+	public ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
+	public List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
 
-	internal bool IsLoggedOn { get; private set; }
-	internal uint CellId { get; private set; }
+	public SteamClient Client { get; set; }
+	public SteamUser User { get; set; }
+	public SteamContent Content { get; set; }
+	public SteamApps Apps { get; set; }
+	public CallbackManager Callbacks { get; set; }
+	public ConnectionPool Connections { get; set; }
+	public SteamUser.LogOnDetails Details { get; }
+
+	public bool IsLoggedOn { get; private set; }
+	public uint CellId { get; private set; }
 
 	private bool Connecting { get; set; }
 	private bool Aborted { get; set; }
@@ -207,12 +210,12 @@ internal sealed class SteamSession : IDisposable {
 					DeviceFriendlyName = $"{Environment.MachineName} (Archival)",
 					Username = Details.Username,
 					Password = Details.Password,
-					IsPersistentSession = ProgramFlags.Instance.RememberPassword,
+					IsPersistentSession = RememberPassword,
 					GuardData = ConfigStore.Instance.GuardData.GetValueOrDefault(Details.Username),
 					Authenticator = new Authenticator(),
 				};
 
-				if (ProgramFlags.Instance.RememberPassword && ConfigStore.Instance.LoginTokens.TryGetValue(authData.Username, out var token)) {
+				if (RememberPassword && ConfigStore.Instance.LoginTokens.TryGetValue(authData.Username, out var token)) {
 					Details.AccessToken = token;
 					Details.Password = null;
 				}
@@ -248,7 +251,7 @@ internal sealed class SteamSession : IDisposable {
 		Details.Password = null;
 		Details.AccessToken = result.RefreshToken;
 
-		if (ProgramFlags.Instance.RememberPassword) {
+		if (RememberPassword) {
 			if (result.NewGuardData != null) {
 				ConfigStore.Instance.GuardData[result.AccountName] = result.NewGuardData;
 			} else {
@@ -301,7 +304,7 @@ internal sealed class SteamSession : IDisposable {
 			}
 
 			if (loggedOn.Result != EResult.OK) {
-				if (!string.IsNullOrEmpty(Details.Username) && ProgramFlags.Instance.RememberPassword) {
+				if (!string.IsNullOrEmpty(Details.Username) && RememberPassword) {
 					ConfigStore.Instance.LoginTokens.Remove(Details.Username);
 					ConfigStore.Instance.Save();
 				}

@@ -7,24 +7,24 @@ using System.IO.IsolatedStorage;
 using ProtoBuf;
 using Serilog;
 
-namespace DepotArchiver.Steam;
+namespace DepotCommon.Steam;
 
 [ProtoContract]
-internal class ConfigStore {
-	internal ConfigStore() {
+public class ConfigStore {
+	public ConfigStore() {
 		LoginTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 		GuardData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 	}
 
 	[ProtoMember(100, IsRequired = false)]
-	internal Dictionary<string, string> LoginTokens { get; private set; }
+	public Dictionary<string, string> LoginTokens { get; private set; }
 
 	[ProtoMember(101, IsRequired = false)]
-	internal Dictionary<string, string> GuardData { get; private set; }
+	public Dictionary<string, string> GuardData { get; private set; }
 
 	private static IsolatedStorageFile IsolatedStorage { get; } = IsolatedStorageFile.GetUserStoreForAssembly();
 
-	internal static ConfigStore Instance {
+	public static ConfigStore Instance {
 		get {
 			if ((ConfigStore?) field != null) {
 				return field;
@@ -47,7 +47,7 @@ internal class ConfigStore {
 		}
 	} = null!;
 
-	internal void Save() {
+	public void Save() {
 		try {
 			using var fs = IsolatedStorage.OpenFile("archiver.config", FileMode.Create, FileAccess.Write);
 			using var ds = new DeflateStream(fs, CompressionMode.Compress);

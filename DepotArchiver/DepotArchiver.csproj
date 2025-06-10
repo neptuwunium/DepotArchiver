@@ -12,17 +12,15 @@ SPDX-License-Identifier: GPL-2.0-or-later
 		<LangVersion>preview</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<Version>1.0.6</Version>
+		<Version>1.1.0</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DragonLib\DragonLib\DragonLib.csproj"/>
+		<ProjectReference Include="..\DepotCommon\DepotCommon.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Serilog" Version="4.2.0"/>
 		<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
-		<PackageReference Include="SteamKit2" Version="3.2.0"/>
 	</ItemGroup>
 
 </Project>

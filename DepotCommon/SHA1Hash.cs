@@ -5,10 +5,10 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace DepotArchiver;
+namespace DepotCommon;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)] [InlineArray(20)]
-internal struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
+public struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 	public byte Value;
 
 	public int CompareTo(SHA1Hash other) => ((Span<byte>) this).SequenceCompareTo(other);
@@ -23,4 +23,12 @@ internal struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 	}
 
 	public override string ToString() => Convert.ToHexString(this).ToLowerInvariant();
+
+	public static bool operator ==(SHA1Hash left, SHA1Hash right) {
+		return left.Equals(right);
+	}
+
+	public static bool operator !=(SHA1Hash left, SHA1Hash right) {
+		return !(left == right);
+	}
 }

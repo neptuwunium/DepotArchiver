@@ -5,25 +5,25 @@
 using SteamKit2;
 using SteamKit2.CDN;
 
-namespace DepotArchiver.Steam;
+namespace DepotCommon.Steam;
 
-internal class ConnectionPool : IDisposable {
+public sealed class ConnectionPool : IDisposable {
 	private readonly List<Server> Servers = [];
 
-	internal ConnectionPool(Client client, SteamContent content) {
+	public ConnectionPool(Client client, SteamContent content) {
 		Content = content;
 		Client = client;
 	}
 
 	private SteamContent Content { get; }
-	internal Client Client { get; }
-	internal Server? ProxyServer { get; private set; }
+	public Client Client { get; }
+	public Server? ProxyServer { get; private set; }
 	private int NextServer { get; set; }
 	public int Attempts => Servers.Count;
 
 	public void Dispose() => Client.Dispose();
 
-	internal async Task UpdateServerList(uint cellId) {
+	public async Task UpdateServerList(uint cellId) {
 		var servers = await Content.GetServersForSteamPipe(cellId);
 
 		ProxyServer = servers.FirstOrDefault(x => x.UseAsProxy);
@@ -43,9 +43,9 @@ internal class ConnectionPool : IDisposable {
 		}
 	}
 
-	internal Server GetConnection() => Servers[NextServer % Servers.Count];
+	public Server GetConnection() => Servers[NextServer % Servers.Count];
 
-	internal Server ExchangeBrokenConnection(Server server) {
+	public Server ExchangeBrokenConnection(Server server) {
 		lock (Servers) {
 			if (Servers[NextServer % Servers.Count] == server) {
 				NextServer++;
