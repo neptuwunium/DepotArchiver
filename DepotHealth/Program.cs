@@ -16,7 +16,7 @@ namespace DepotHealth;
 internal static class Program {
 	private static long CorruptChunks;
 
-	private static async Task<int> Main() {
+	private static int Main() {
 		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
 
 		var flags = ProgramFlags.Instance;
@@ -34,14 +34,14 @@ internal static class Program {
 				Log.Error("Cannot find Depot Key for {Depot}", Path.GetFileName(depotPath));
 			}
 
-			await using (var stream = new FileStream(depotKeyPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+			using (var stream = new FileStream(depotKeyPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
 				stream.ReadExactly(depotKey);
 			}
 
 			var processedChunks = new HashSet<SHA1Hash>();
 			foreach (var manifest in Directory.EnumerateFiles(manifestFolder)) {
 				try {
-					await ProcessDepotManifest(manifest, depotPath, depotKey, processedChunks);
+					ProcessDepotManifest(manifest, depotPath, depotKey, processedChunks);
 				} catch {
 					Log.Error("Cannot process manifest {Path}", manifest);
 				}
@@ -51,7 +51,7 @@ internal static class Program {
 		return CorruptChunks > 0 ? 1 : 0;
 	}
 
-	private static async Task ProcessDepotManifest(string manifestPath, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
+	private static void ProcessDepotManifest(string manifestPath, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
 		var manifest = DepotManifest.LoadFromFile(manifestPath);
 		if (manifest == null) {
 			Log.Error("Cannot load manifest {Path}", manifestPath);
@@ -72,7 +72,7 @@ internal static class Program {
 
 		var depotId = Path.GetFileName(depotPath);
 
-		var checkTasks = new List<Task>();
+		var ops = new List<ChunkLoadOp>();
 		foreach (var chunk in manifest.Files.Where(file =>
 										  (file.Flags & EDepotFileFlag.Directory) == 0 &&
 										  (file.Flags & EDepotFileFlag.Symlink) == 0)
@@ -84,18 +84,19 @@ internal static class Program {
 			var chunkId = MemoryMarshal.Read<SHA1Hash>(chunk.ChunkID);
 
 			if (processedChunks.Add(chunkId)) {
-				checkTasks.Add(CheckChunk(depotId, Path.Combine(depotPath, chunkId.ToString()), chunk, depotKey));
+				ops.Add(new ChunkLoadOp(depotId, chunk, Path.Combine(depotPath, chunkId.ToString()), depotKey));
 			}
 		}
 
-		await Task.WhenAll(checkTasks);
+		Parallel.ForEach(ops, CheckChunk);
 	}
 
-	private static async Task CheckChunk(string depotId, string chunkPath, DepotManifest.ChunkData chunk, byte[] depotKey) {
+	private static void CheckChunk(ChunkLoadOp op) {
+		var (depotId, chunk, chunkPath, depotKey) = op;
 		var compressed = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
 		var uncompressed = ArrayPool<byte>.Shared.Rent((int) chunk.UncompressedLength);
 		try {
-			await using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+			using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
 				stream.ReadExactly(compressed.AsSpan(0, (int) chunk.CompressedLength));
 			}
 
@@ -103,11 +104,13 @@ internal static class Program {
 			Log.Debug("Chunk {Chunk}, Depot {Depot}: OK", Path.GetFileName(chunkPath), depotId);
 		} catch (Exception ex) {
 			Interlocked.Increment(ref CorruptChunks);
-			await Console.Error.WriteLineAsync(chunkPath);
+			Console.Error.WriteLine(chunkPath);
 			Log.Error(ex, "Chunk {Chunk}, Depot {Depot}: ERR", Path.GetFileName(chunkPath), depotId);
 		} finally {
 			ArrayPool<byte>.Shared.Return(compressed);
 			ArrayPool<byte>.Shared.Return(uncompressed);
 		}
 	}
+
+	private record ChunkLoadOp(string DepotId, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
 }
