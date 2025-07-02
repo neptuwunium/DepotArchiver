@@ -9,6 +9,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\DepotArchiver\DepotArchiver.csproj"/>
 		<ProjectReference Include="..\DepotUnarchiver\DepotUnarchiver.csproj"/>
+		<ProjectReference Include="..\DepotHealth\DepotHealth.csproj"/>
 	</ItemGroup>
 
 </Project>
