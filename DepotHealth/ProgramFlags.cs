@@ -11,4 +11,16 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("depots", Help = "the directory chunks are saved in")]
 	public string DepotDirectory { get; set; } = "depots";
+
+	[Flag("meta", Help = "display metadata from manifests (note this will sort manifests by date and may use more memory)")]
+	public bool Meta { get; set; }
+
+	[Flag("list", Help = "list files from manifests")]
+	public bool List { get; set; }
+
+	[Flag("only-info", Help = "only display metadata and manifest files, don't verify chunks")]
+	public bool OnlyInfo { get; set; }
+
+	[Flag("repair", Help = "attempt to repair chunks by redownloading them")]
+	public bool Repair { get; set; }
 }
