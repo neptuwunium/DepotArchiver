@@ -1,9 +1,16 @@
+<!--
+SPDX-FileCopyrightText: 2025 Legiayayana
+
+SPDX-License-Identifier: GPL-2.0-or-later
+-->
+
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<OutputType>library</OutputType>
 		<TargetFramework>net8.0</TargetFramework>
 		<AssemblyName>DepotArchiverPublish</AssemblyName>
+		<Version>1.1.1</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
