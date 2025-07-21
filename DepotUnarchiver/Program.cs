@@ -69,6 +69,7 @@ internal static class Program {
 		var ops = new List<ChunkLoadOp>();
 
 		var targetDirectory = flags.AppendManifest ? Path.Combine(flags.TargetDirectory, manifestIdStr) : flags.TargetDirectory;
+		var sum = 0UL;
 
 		foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
 			if (flags.List) {
@@ -124,6 +125,7 @@ internal static class Program {
 			Log.Information("Allocating {Path}", dest);
 			var stream = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
 			stream.SetLength((long) file.TotalSize);
+			sum += file.TotalSize;
 
 			var memoryMappedFile = MemoryMappedFile.CreateFromFile(stream, null, stream.Length, MemoryMappedFileAccess.ReadWrite, HandleInheritability.None, false);
 			fileMaps.Add(memoryMappedFile);
@@ -138,13 +140,17 @@ internal static class Program {
 			}
 		}
 
-		Parallel.ForEach(ops, ProcessChunk);
+		if (ops.Count > 0) {
+			Parallel.ForEach(ops, ProcessChunk);
+		}
 
 		foreach (var fileMap in fileMaps) {
 			fileMap.Dispose();
 		}
 
-		Log.Information("Unpacked {Size} files", manifest.Files.Sum(x => (long) x.TotalSize).GetHumanReadableBytes());
+		if (sum > 0) {
+			Log.Information("Unpacked {Size} bytes", sum.GetHumanReadableBytes());
+		}
 	}
 
 	private static void ProcessChunk(ChunkLoadOp op) {
