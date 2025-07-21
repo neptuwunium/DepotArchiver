@@ -88,6 +88,10 @@ internal static class Program {
 				continue;
 			}
 
+			if (flags.NoClobber && Path.Exists(dest)) {
+				continue;
+			}
+
 			if ((file.Flags & EDepotFileFlag.Symlink) != 0) {
 				if (string.IsNullOrEmpty(file.LinkTarget)) {
 					continue;

@@ -34,4 +34,7 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("append-manifest-id", Help = "Append the manifest id to the file path")]
 	public bool AppendManifest { get; set; }
+
+	[Flag("no-clobber", Aliases = ["n"], Help = "Do not overwrite files that already exist")]
+	public bool NoClobber { get; set; }
 }
