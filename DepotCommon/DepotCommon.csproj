@@ -19,8 +19,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Serilog" Version="4.2.0"/>
-		<PackageReference Include="SteamKit2" Version="3.2.0"/>
+		<PackageReference Include="Serilog" Version="4.3.0" />
+		<PackageReference Include="SteamKit2" Version="3.3.0" />
 	</ItemGroup>
 
 </Project>

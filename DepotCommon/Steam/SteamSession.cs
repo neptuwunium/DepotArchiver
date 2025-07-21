@@ -19,7 +19,7 @@ public sealed class SteamSession : IDisposable {
 		RememberPassword = details.ShouldRememberPassword;
 		LoggedInTaskCompletionSource = new TaskCompletionSource();
 
-		var config = SteamConfiguration.Create(c => c.WithHttpClientFactory(() => {
+		var config = SteamConfiguration.Create(c => c.WithHttpClientFactory(_ => {
 			var client = new HttpClient();
 			client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("DepotArchiver", "1.0.0"));
 			return client;
