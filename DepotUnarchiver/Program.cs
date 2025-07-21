@@ -149,7 +149,7 @@ internal static class Program {
 		}
 
 		if (sum > 0) {
-			Log.Information("Unpacked {Size} bytes", sum.GetHumanReadableBytes());
+			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.GetHumanReadableBytes(), manifestId, manifest.DepotID);
 		}
 	}
 
