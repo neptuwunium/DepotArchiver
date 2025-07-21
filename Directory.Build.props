@@ -1,0 +1,12 @@
+<!--
+SPDX-FileCopyrightText: 2025 Legiayayana
+
+SPDX-License-Identifier: GPL-2.0-or-later
+-->
+
+<Project>
+	<PropertyGroup>
+		<DepotTargetFramework>net8.0</DepotTargetFramework>
+		<DepotArchiverVersion>1.1.2</DepotArchiverVersion>
+	</PropertyGroup>
+</Project>
