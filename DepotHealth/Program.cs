@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DepotCommon;
 using DepotCommon.Steam;
 using DragonLib;
-using DragonLib.IO.Binary;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -163,25 +163,26 @@ internal static class Program {
 
 		Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = ProgramFlags.Instance.Threads },
 			() => (
-				Compressed: new RentedArray<byte>(int.CreateChecked(maxChunk)),
-				Uncompressed: new RentedArray<byte>(int.CreateChecked(maxChunk))
+				Compressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk)),
+				Uncompressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk))
 			),
 			CheckChunk,
 			pair => {
-				pair.Compressed.Dispose();
-				pair.Uncompressed.Dispose();
+				ArrayPool<byte>.Shared.Return(pair.Compressed);
+				ArrayPool<byte>.Shared.Return(pair.Uncompressed);
 			});
 	}
 
-	private static (RentedArray<byte>, RentedArray<byte>) CheckChunk(ChunkLoadOp op, ParallelLoopState state, (RentedArray<byte>, RentedArray<byte>) pair) {
+	private static (byte[], byte[]) CheckChunk(ChunkLoadOp op, ParallelLoopState state, (byte[], byte[]) pair) {
 		var (depotId, chunk, chunkPath, depotKey) = op;
 		var (compressed, uncompressed) = pair;
 		try {
+			var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
 			using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-				stream.ReadExactly(compressed.Span[..(int) chunk.CompressedLength]);
+				stream.ReadExactly(compressedSpan);
 			}
 
-			DepotChunk.Process(chunk, compressed.Span[..(int) chunk.CompressedLength], uncompressed.Array, depotKey);
+			DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
 			Log.Debug("Chunk {Chunk}, Depot {Depot}: OK", Path.GetFileName(chunkPath), depotId);
 		} catch {
 			Interlocked.Increment(ref CorruptChunks);

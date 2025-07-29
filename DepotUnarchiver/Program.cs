@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.MemoryMappedFiles;
 using DragonLib;
-using DragonLib.IO.Binary;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -258,13 +258,13 @@ internal static class Program {
 		if (ops.Count > 0) {
 			Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = flags.Threads },
 				() => (
-					Compressed: new RentedArray<byte>(int.CreateChecked(maxChunk)),
-					Uncompressed: new RentedArray<byte>(int.CreateChecked(maxChunk))
+					Compressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk)),
+					Uncompressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk))
 				),
 				ProcessChunk,
 				pair => {
-					pair.Compressed.Dispose();
-					pair.Uncompressed.Dispose();
+					ArrayPool<byte>.Shared.Return(pair.Compressed);
+					ArrayPool<byte>.Shared.Return(pair.Uncompressed);
 				});
 		}
 
@@ -277,20 +277,20 @@ internal static class Program {
 		}
 	}
 
-	private static (RentedArray<byte>, RentedArray<byte>) ProcessChunk(ChunkLoadOp op, ParallelLoopState state, (RentedArray<byte>, RentedArray<byte>) pool) {
+	private static (byte[], byte[]) ProcessChunk(ChunkLoadOp op, ParallelLoopState state, (byte[], byte[]) pool) {
 		var (map, chunk, path, depotKey, manifest) = op;
 
 		var (compressed, uncompressed) = pool;
 		try {
-			var compressedSpan = compressed.Span[..(int) chunk.CompressedLength];
+			var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
 
 			using (var stream = new FileStream(op.ChunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
 				stream.ReadExactly(compressedSpan);
 			}
 
-			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed.Array, depotKey);
+			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
 			using var accessor = map.CreateViewAccessor((long) chunk.Offset, n);
-			accessor.WriteArray(0, uncompressed.Array, 0, n);
+			accessor.WriteArray(0, uncompressed, 0, n);
 
 			Log.Information("[{Depot}/{Manifest}] Processed Chunk {Chunk}", manifest.DepotID, manifest.ManifestGID, Path.GetFileName(path));
 		} catch (Exception ex) {
