@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.MemoryMappedFiles;
 using DragonLib;
+using DragonLib.IO.Binary;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -171,6 +171,7 @@ internal static class Program {
 		}
 
 		var sum = 0UL;
+		var maxChunk = 0UL;
 
 		foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
 			if (flags.List) {
@@ -223,12 +224,17 @@ internal static class Program {
 			var directory = Path.GetDirectoryName(dest)!;
 			Directory.CreateDirectory(directory);
 
-			Log.Information("Allocating {Path}", dest);
-			var stream = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
-			stream.SetLength((long) file.TotalSize);
+			using (var stream = new FileStream(dest, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite)) {
+				if (stream.Length != (long) file.TotalSize) {
+					Log.Information("[{Depot}/{Manifest}] Allocating {Path}", manifest.DepotID, manifest.ManifestGID, dest);
+					stream.SetLength((long) file.TotalSize);
+					stream.Flush();
+				}
+			}
+
 			sum += file.TotalSize;
 
-			var memoryMappedFile = MemoryMappedFile.CreateFromFile(stream, null, stream.Length, MemoryMappedFileAccess.ReadWrite, HandleInheritability.None, false);
+			var memoryMappedFile = MemoryMappedFile.CreateFromFile(dest, FileMode.Open, null, (long) file.TotalSize, MemoryMappedFileAccess.ReadWrite);
 			fileMaps.Add(memoryMappedFile);
 
 			foreach (var chunk in file.Chunks) {
@@ -237,12 +243,29 @@ internal static class Program {
 				}
 
 				var chunkPath = Path.Combine(depotPath, Convert.ToHexString(chunk.ChunkID).ToLowerInvariant());
-				ops.Add(new ChunkLoadOp(memoryMappedFile, chunk, chunkPath, depotKey));
+				ops.Add(new ChunkLoadOp(memoryMappedFile, chunk, chunkPath, depotKey, manifest));
+
+				if (chunk.CompressedLength > maxChunk) {
+					maxChunk = chunk.CompressedLength;
+				}
+
+				if (chunk.UncompressedLength > maxChunk) {
+					maxChunk = chunk.UncompressedLength;
+				}
 			}
 		}
 
 		if (ops.Count > 0) {
-			Parallel.ForEach(ops, ProcessChunk);
+			Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = flags.Threads },
+				() => (
+					Compressed: new RentedArray<byte>(int.CreateChecked(maxChunk)),
+					Uncompressed: new RentedArray<byte>(int.CreateChecked(maxChunk))
+				),
+				ProcessChunk,
+				pair => {
+					pair.Compressed.Dispose();
+					pair.Uncompressed.Dispose();
+				});
 		}
 
 		foreach (var fileMap in fileMaps) {
@@ -254,30 +277,28 @@ internal static class Program {
 		}
 	}
 
-	private static void ProcessChunk(ChunkLoadOp op) {
-		var (map, chunk, path, depotKey) = op;
+	private static (RentedArray<byte>, RentedArray<byte>) ProcessChunk(ChunkLoadOp op, ParallelLoopState state, (RentedArray<byte>, RentedArray<byte>) pool) {
+		var (map, chunk, path, depotKey, manifest) = op;
 
-		var compressed = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
-		var uncompressed = ArrayPool<byte>.Shared.Rent((int) chunk.UncompressedLength);
+		var (compressed, uncompressed) = pool;
 		try {
-			var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
+			var compressedSpan = compressed.Span[..(int) chunk.CompressedLength];
 
 			using (var stream = new FileStream(op.ChunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
 				stream.ReadExactly(compressedSpan);
 			}
 
-			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
+			var n = DepotChunk.Process(chunk, compressedSpan, uncompressed.Array, depotKey);
 			using var accessor = map.CreateViewAccessor((long) chunk.Offset, n);
-			accessor.WriteArray(0, uncompressed, 0, n);
+			accessor.WriteArray(0, uncompressed.Array, 0, n);
 
-			Log.Information("Processed Chunk {Chunk}", Path.GetFileName(path));
+			Log.Information("[{Depot}/{Manifest}] Processed Chunk {Chunk}", manifest.DepotID, manifest.ManifestGID, Path.GetFileName(path));
 		} catch (Exception ex) {
 			Log.Error(ex, "Cannot process chunk {Chunk}", Path.GetFileName(path));
-		} finally {
-			ArrayPool<byte>.Shared.Return(compressed);
-			ArrayPool<byte>.Shared.Return(uncompressed);
 		}
+
+		return pool;
 	}
 
-	private record ChunkLoadOp(MemoryMappedFile File, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
+	private record ChunkLoadOp(MemoryMappedFile File, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey, DepotManifest Manifest);
 }

@@ -23,4 +23,7 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("repair", Help = "attempt to repair chunks by redownloading them")]
 	public bool Repair { get; set; }
+
+	[Flag("threads", Help = "number of threads to spawn")]
+	public int Threads { get; set; } = Environment.ProcessorCount;
 }

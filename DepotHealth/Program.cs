@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using DepotCommon;
 using DepotCommon.Steam;
 using DragonLib;
+using DragonLib.IO.Binary;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -73,7 +73,7 @@ internal static class Program {
 			var processedChunks = new HashSet<SHA1Hash>();
 			foreach (var manifest in GetManifests(depotKey, manifestFolder)) {
 				try {
-					await ProcessDepotManifest(manifest, depotPath, depotKey, processedChunks);
+					ProcessDepotManifest(manifest, depotPath, depotKey, processedChunks);
 				} catch (Exception e) {
 					Log.Error(e, "Cannot process manifest {Id} (depot {DepotId})", manifest.ManifestGID, manifest.DepotID);
 				}
@@ -116,7 +116,7 @@ internal static class Program {
 		}
 	}
 
-	private static async Task ProcessDepotManifest(DepotManifest manifest, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
+	private static void ProcessDepotManifest(DepotManifest manifest, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
 		if (ProgramFlags.Instance.Meta) {
 			Log.Information("Depot: {DepotId}; Manifest: {Id}; Size: {Compressed} ({Uncompressed})", manifest.DepotID, manifest.ManifestGID, manifest.TotalCompressedSize.GetHumanReadableBytes(), manifest.TotalUncompressedSize.GetHumanReadableBytes());
 			if (ProgramFlags.Instance.List) {
@@ -135,6 +135,7 @@ internal static class Program {
 
 		var depotId = manifest.DepotID;
 		var ops = new List<ChunkLoadOp>();
+		var maxChunk = 0UL;
 		foreach (var chunk in manifest.Files!.Where(file =>
 										  (file.Flags & EDepotFileFlag.Directory) == 0 &&
 										  (file.Flags & EDepotFileFlag.Symlink) == 0)
@@ -145,37 +146,54 @@ internal static class Program {
 
 			var chunkId = MemoryMarshal.Read<SHA1Hash>(chunk.ChunkID);
 
-			if (processedChunks.Add(chunkId)) {
-				ops.Add(new ChunkLoadOp(depotId, chunk, Path.Combine(depotPath, chunkId.ToString()), depotKey));
+			if (!processedChunks.Add(chunkId)) {
+				continue;
+			}
+
+			ops.Add(new ChunkLoadOp(depotId, chunk, Path.Combine(depotPath, chunkId.ToString()), depotKey));
+
+			if (chunk.CompressedLength > maxChunk) {
+				maxChunk = chunk.CompressedLength;
+			}
+
+			if (chunk.UncompressedLength > maxChunk) {
+				maxChunk = chunk.UncompressedLength;
 			}
 		}
 
-		await Parallel.ForEachAsync(ops, CheckChunk);
+		Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = ProgramFlags.Instance.Threads },
+			() => (
+				Compressed: new RentedArray<byte>(int.CreateChecked(maxChunk)),
+				Uncompressed: new RentedArray<byte>(int.CreateChecked(maxChunk))
+			),
+			CheckChunk,
+			pair => {
+				pair.Compressed.Dispose();
+				pair.Uncompressed.Dispose();
+			});
 	}
 
-	private static async ValueTask CheckChunk(ChunkLoadOp op, CancellationToken ct) {
+	private static (RentedArray<byte>, RentedArray<byte>) CheckChunk(ChunkLoadOp op, ParallelLoopState state, (RentedArray<byte>, RentedArray<byte>) pair) {
 		var (depotId, chunk, chunkPath, depotKey) = op;
-		var compressed = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
-		var uncompressed = ArrayPool<byte>.Shared.Rent((int) chunk.UncompressedLength);
+		var (compressed, uncompressed) = pair;
 		try {
-			await using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-				stream.ReadExactly(compressed.AsSpan(0, (int) chunk.CompressedLength));
+			using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+				stream.ReadExactly(compressed.Span[..(int) chunk.CompressedLength]);
 			}
 
-			DepotChunk.Process(chunk, compressed.AsSpan(0, (int) chunk.CompressedLength), uncompressed, depotKey);
+			DepotChunk.Process(chunk, compressed.Span[..(int) chunk.CompressedLength], uncompressed.Array, depotKey);
 			Log.Debug("Chunk {Chunk}, Depot {Depot}: OK", Path.GetFileName(chunkPath), depotId);
 		} catch {
 			Interlocked.Increment(ref CorruptChunks);
 			Log.Error("Chunk {Chunk}, Depot {Depot}: ERR", Path.GetFileName(chunkPath), depotId);
 			if (ProgramFlags.Instance.Repair) {
-				await Repair(chunkPath, depotId, depotKey, chunk);
+				Repair(chunkPath, depotId, depotKey, chunk).Wait();
 			} else {
-				await Console.Error.WriteLineAsync(chunkPath);
+				Console.Error.WriteLine(chunkPath);
 			}
-		} finally {
-			ArrayPool<byte>.Shared.Return(compressed);
-			ArrayPool<byte>.Shared.Return(uncompressed);
 		}
+
+		return (compressed, uncompressed);
 	}
 
 	private static async Task Repair(string chunkPath, uint depotId, byte[] depotKey, DepotManifest.ChunkData chunk) {
