@@ -105,7 +105,7 @@ internal static class Program {
 
 		try {
 			client.Disconnect();
-		} catch(Exception e) {
+		} catch (Exception e) {
 			Log.Warning(e, "Crashed while exiting?");
 			Environment.Exit(0);
 			// what
@@ -279,6 +279,7 @@ internal static class Program {
 				Directory.CreateDirectory(manifestRootPath);
 
 				var cdn = new ContentContext(null, client.Connections.Connection);
+				var toRemove = new HashSet<ulong>();
 				foreach (var pair in manifests) {
 					var (manifestId, branch) = pair;
 					if (!done.Add((depotId, manifestId))) {
@@ -287,6 +288,10 @@ internal static class Program {
 
 					var manifestPath = Path.Combine(manifestRootPath, manifestId.ToString("D", CultureInfo.InvariantCulture));
 					if (File.Exists(manifestPath)) {
+						if (ProgramFlags.Instance.OnlyNew) {
+							toRemove.Add(manifestId);
+						}
+
 						continue;
 					}
 
@@ -305,6 +310,14 @@ internal static class Program {
 					}
 
 					await FetchBranchManifest(client, appId, depotId, manifestId, branch, manifestPath, cdn);
+				}
+
+				if (!ProgramFlags.Instance.OnlyNew || toRemove.Count <= 0) {
+					continue;
+				}
+
+				foreach (var manifestId in toRemove) {
+					manifests.Remove(manifestId);
 				}
 			}
 		}
@@ -390,6 +403,10 @@ internal static class Program {
 		try {
 			foreach (var (appId, depot) in plan) {
 				foreach (var (depotId, manifests) in depot) {
+					if (manifests.Count == 0) {
+						continue;
+					}
+
 					var depotPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture));
 					var depotKeyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
 					var depotKey = ProgramFlags.Instance.Validate && File.Exists(depotKeyPath) ? await File.ReadAllBytesAsync(depotKeyPath, cts.Token) : null;

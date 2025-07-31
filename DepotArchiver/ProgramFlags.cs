@@ -59,6 +59,9 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("login-id", Extra = NumberStyles.Integer | NumberStyles.AllowHexSpecifier, Help = "the unique login id for login session tracking")]
 	public uint? LoginId { get; set; }
 
+	[Flag("only-new-manifests", Help = "only process new manifests")]
+	public bool OnlyNew { get; set; }
+
 	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
 		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
 		Console.WriteLine("CSV Format:");
