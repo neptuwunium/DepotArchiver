@@ -89,11 +89,11 @@ public sealed class SteamSession : IDisposable {
 
 		var resp = await Apps.GetDepotDecryptionKey(depotId, appid);
 
-		Log.Information("Got depot key for {Depot} ({Result})", resp.DepotID, resp.Result);
-
 		if (resp.Result != EResult.OK) {
 			return null;
 		}
+
+		Log.Information("Got depot key for {Depot} ({Result})", resp.DepotID, resp.Result);
 
 		return DepotKeys[resp.DepotID] = resp.DepotKey;
 	}

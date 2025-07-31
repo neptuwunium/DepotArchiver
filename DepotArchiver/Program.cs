@@ -209,8 +209,8 @@ internal static class Program {
 				}
 
 				var target = Path.Combine(output, appId.ToString("D", CultureInfo.InvariantCulture) + ".vdf");
-				Log.Information("Saved {Id}.vdf", appId);
 				app.KeyValues.SaveToFile(target, false);
+				Log.Information("Saved {Id}.vdf", appId);
 
 				await ListDepots(plan, appId, app);
 			}
