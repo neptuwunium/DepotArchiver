@@ -61,7 +61,7 @@ public static class ChunkDownload {
 				return false;
 			}
 
-			var server = client.Connections.GetConnection();
+			var server = client.Connections.Connection;
 			SteamContent.CDNAuthToken? cdnToken = null;
 
 			var attempts = client.Connections.Attempts * 2;

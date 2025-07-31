@@ -278,7 +278,7 @@ internal static class Program {
 				var manifestRootPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
 				Directory.CreateDirectory(manifestRootPath);
 
-				var cdn = new ContentContext(null, client.Connections.GetConnection());
+				var cdn = new ContentContext(null, client.Connections.Connection);
 				foreach (var pair in manifests) {
 					var (manifestId, branch) = pair;
 					if (!done.Add((depotId, manifestId))) {

@@ -43,7 +43,7 @@ public sealed class ConnectionPool : IDisposable {
 		}
 	}
 
-	public Server GetConnection() => Servers[NextServer % Servers.Count];
+	public Server Connection => Servers[NextServer % Servers.Count];
 
 	public Server ExchangeBrokenConnection(Server server) {
 		lock (Servers) {
@@ -51,7 +51,7 @@ public sealed class ConnectionPool : IDisposable {
 				NextServer++;
 			}
 
-			return GetConnection();
+			return Connection;
 		}
 	}
 }
