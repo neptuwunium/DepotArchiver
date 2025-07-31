@@ -199,6 +199,7 @@ internal static class Program {
 
 	private static async Task Repair(string chunkPath, uint depotId, byte[] depotKey, DepotManifest.ChunkData chunk) {
 		File.Delete(chunkPath);
+		await Console.Error.WriteLineAsync(chunkPath);
 
 		var attempt = 3;
 		while (attempt-- > 0) {
