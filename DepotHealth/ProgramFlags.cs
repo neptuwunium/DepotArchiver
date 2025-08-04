@@ -26,4 +26,7 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("threads", Help = "number of threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
+
+	[Flag("json", Help = "output json data to stderr")]
+	public bool OutputJson { get; set; }
 }

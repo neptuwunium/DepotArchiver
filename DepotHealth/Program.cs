@@ -5,6 +5,8 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using DepotCommon;
 using DepotCommon.Steam;
 using DragonLib;
@@ -15,9 +17,48 @@ using SteamKit2.CDN;
 
 namespace DepotHealth;
 
+internal record ManifestFileContext(
+	string Path,
+	SHA1Hash Hash,
+	ulong CompressedSize,
+	ulong Size,
+	[property: JsonConverter(typeof(JsonStringEnumConverter<EDepotFileFlag>))]
+	EDepotFileFlag Flags);
+
+internal record ManifestContext(ulong TotalCompressedSize, ulong TotalSize, List<ManifestFileContext> Files);
+
+[JsonConverter(typeof(JsonContextConverter))]
+internal record JsonContext(Dictionary<uint, HashSet<string>> BadChunks, Dictionary<uint, Dictionary<ulong, ManifestContext>> Manifests);
+
+internal class JsonContextConverter : JsonConverter<JsonContext> {
+	public override JsonContext Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => throw new NotSupportedException();
+
+	public override void Write(Utf8JsonWriter writer, JsonContext value, JsonSerializerOptions options) {
+		writer.WriteStartObject();
+
+		if (value.BadChunks.Count > 0) {
+			writer.WritePropertyName(options.PropertyNamingPolicy?.ConvertName(nameof(JsonContext.BadChunks)) ?? nameof(JsonContext.BadChunks));
+			JsonSerializer.Serialize(writer, value.BadChunks, options);
+		}
+
+		if (value.Manifests.Count > 0) {
+			writer.WritePropertyName(options.PropertyNamingPolicy?.ConvertName(nameof(JsonContext.Manifests)) ?? nameof(JsonContext.Manifests));
+			JsonSerializer.Serialize(writer, value.Manifests, options);
+		}
+
+		writer.WriteEndArray();
+	}
+}
+
 internal static class Program {
 	private static long CorruptChunks;
 	private static SteamSession? Session { get; set; }
+
+	internal static JsonContext Context { get; } = new([], []);
+
+	internal static JsonSerializerOptions JsonOptions { get; } = new() {
+		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+	};
 
 	private static async Task<int> Main() {
 		Log.Logger = new LoggerConfiguration()
@@ -80,6 +121,10 @@ internal static class Program {
 			}
 		}
 
+		if (flags.OutputJson && (Context.BadChunks.Count > 0 || Context.Manifests.Count > 0)) {
+			await Console.Error.WriteLineAsync(JsonSerializer.Serialize(Context, JsonOptions));
+		}
+
 		try {
 			Session?.Disconnect();
 		} catch (Exception e) {
@@ -117,19 +162,27 @@ internal static class Program {
 	}
 
 	private static void ProcessDepotManifest(DepotManifest manifest, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
-		if (ProgramFlags.Instance.Meta) {
+		var flags = ProgramFlags.Instance;
+		if (flags.Meta) {
 			Log.Information("Depot: {DepotId}; Manifest: {Id}; Size: {Compressed} ({Uncompressed})", manifest.DepotID, manifest.ManifestGID, manifest.TotalCompressedSize.GetHumanReadableBytes(), manifest.TotalUncompressedSize.GetHumanReadableBytes());
-			if (ProgramFlags.Instance.List) {
+			ManifestContext? manifestContext = null;
+
+			if (flags.OutputJson) {
+				manifestContext = new ManifestContext(manifest.TotalCompressedSize, manifest.TotalUncompressedSize, []);
+			}
+
+			if (flags.List) {
 				foreach (var file in manifest.Files!.OrderBy(x => x.FileName).Where(f => (f.Flags & EDepotFileFlag.Directory) == 0)) {
 					var hash = MemoryMarshal.Read<SHA1Hash>(file.FileHash);
 					Log.Information("-> {FileName} ({Hash}, Size: {Compressed})", file.FileName, hash, file.TotalSize.GetHumanReadableBytes());
+					manifestContext?.Files.Add(new ManifestFileContext(file.FileName, hash, (ulong) file.Chunks.Sum(x => x.CompressedLength), file.TotalSize, file.Flags));
 				}
 			}
 		} else {
 			Log.Information("Processing manifest {Id}", manifest.ManifestGID);
 		}
 
-		if (ProgramFlags.Instance.OnlyInfo) {
+		if (flags.OnlyInfo) {
 			return;
 		}
 
@@ -161,7 +214,11 @@ internal static class Program {
 			}
 		}
 
-		Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = ProgramFlags.Instance.Threads },
+		if (flags.OutputJson) {
+			Context.BadChunks[depotId] = [];
+		}
+
+		Parallel.ForEach(ops, new ParallelOptions { MaxDegreeOfParallelism = flags.Threads },
 			() => (
 				Compressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk)),
 				Uncompressed: ArrayPool<byte>.Shared.Rent(int.CreateChecked(maxChunk))
@@ -171,6 +228,14 @@ internal static class Program {
 				ArrayPool<byte>.Shared.Return(pair.Compressed);
 				ArrayPool<byte>.Shared.Return(pair.Uncompressed);
 			});
+
+		if (!flags.OutputJson) {
+			return;
+		}
+
+		if (Context.BadChunks[depotId].Count == 0) {
+			Context.BadChunks.Remove(depotId);
+		}
 	}
 
 	private static (byte[], byte[]) CheckChunk(ChunkLoadOp op, ParallelLoopState state, (byte[], byte[]) pair) {
@@ -187,10 +252,14 @@ internal static class Program {
 		} catch {
 			Interlocked.Increment(ref CorruptChunks);
 			Log.Error("Chunk {Chunk}, Depot {Depot}: ERR", Path.GetFileName(chunkPath), depotId);
-			if (ProgramFlags.Instance.Repair) {
-				Repair(chunkPath, depotId, depotKey, chunk).Wait();
+			if (ProgramFlags.Instance.OutputJson) {
+				Context.BadChunks[depotId].Add(chunkPath);
 			} else {
 				Console.Error.WriteLine(chunkPath);
+			}
+
+			if (ProgramFlags.Instance.Repair) {
+				Repair(chunkPath, depotId, depotKey, chunk).Wait();
 			}
 		}
 
@@ -199,7 +268,6 @@ internal static class Program {
 
 	private static async Task Repair(string chunkPath, uint depotId, byte[] depotKey, DepotManifest.ChunkData chunk) {
 		File.Delete(chunkPath);
-		await Console.Error.WriteLineAsync(chunkPath);
 
 		var attempt = 3;
 		while (attempt-- > 0) {

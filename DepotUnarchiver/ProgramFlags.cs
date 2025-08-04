@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using System.Globalization;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using DragonLib.CommandLine;
