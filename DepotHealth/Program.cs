@@ -46,7 +46,7 @@ internal class JsonContextConverter : JsonConverter<JsonContext> {
 			JsonSerializer.Serialize(writer, value.Manifests, options);
 		}
 
-		writer.WriteEndArray();
+		writer.WriteEndObject();
 	}
 }
 
@@ -61,11 +61,13 @@ internal static class Program {
 	};
 
 	private static async Task<int> Main() {
-		Log.Logger = new LoggerConfiguration()
-					 .MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information)
-					 .WriteTo.Console().CreateLogger();
-
 		var flags = ProgramFlags.Instance;
+
+		if (!flags.Quiet) {
+			Log.Logger = new LoggerConfiguration()
+						 .MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information)
+						 .WriteTo.Console().CreateLogger();
+		}
 
 		Thread? loop = null;
 
@@ -168,7 +170,11 @@ internal static class Program {
 			ManifestContext? manifestContext = null;
 
 			if (flags.OutputJson) {
-				manifestContext = new ManifestContext(manifest.TotalCompressedSize, manifest.TotalUncompressedSize, []);
+				if (!Context.Manifests.TryGetValue(manifest.DepotID, out var depotManifests)) {
+					depotManifests = Context.Manifests[manifest.DepotID] = [];
+				}
+
+				manifestContext = depotManifests[manifest.ManifestGID] = new ManifestContext(manifest.TotalCompressedSize, manifest.TotalUncompressedSize, []);
 			}
 
 			if (flags.List) {
@@ -203,7 +209,7 @@ internal static class Program {
 				continue;
 			}
 
-			ops.Add(new ChunkLoadOp(depotId, chunk, Path.Combine(depotPath, chunkId.ToString()), depotKey));
+			ops.Add(new ChunkLoadOp(depotId, chunk, Path.Combine(depotPath, chunkId.ToString()), manifest.ManifestGID, depotKey));
 
 			if (chunk.CompressedLength > maxChunk) {
 				maxChunk = chunk.CompressedLength;
@@ -239,7 +245,7 @@ internal static class Program {
 	}
 
 	private static (byte[], byte[]) CheckChunk(ChunkLoadOp op, ParallelLoopState state, (byte[], byte[]) pair) {
-		var (depotId, chunk, chunkPath, depotKey) = op;
+		var (depotId, chunk, chunkPath, manifestId, depotKey) = op;
 		var (compressed, uncompressed) = pair;
 		try {
 			var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
@@ -252,10 +258,11 @@ internal static class Program {
 		} catch {
 			Interlocked.Increment(ref CorruptChunks);
 			Log.Error("Chunk {Chunk}, Depot {Depot}: ERR", Path.GetFileName(chunkPath), depotId);
+			var err = $"{manifestId:D},{chunkPath}";
 			if (ProgramFlags.Instance.OutputJson) {
-				Context.BadChunks[depotId].Add(chunkPath);
+				Context.BadChunks[depotId].Add(err);
 			} else {
-				Console.Error.WriteLine(chunkPath);
+				Console.Error.WriteLine(err);
 			}
 
 			if (ProgramFlags.Instance.Repair) {
@@ -293,5 +300,5 @@ internal static class Program {
 		}
 	}
 
-	private record ChunkLoadOp(uint DepotId, DepotManifest.ChunkData Chunk, string ChunkPath, byte[] DepotKey);
+	private record ChunkLoadOp(uint DepotId, DepotManifest.ChunkData Chunk, string ChunkPath, ulong ManifestPath, byte[] DepotKey);
 }

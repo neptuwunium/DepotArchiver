@@ -29,4 +29,7 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("json", Help = "output json data to stderr")]
 	public bool OutputJson { get; set; }
+
+	[Flag("quiet", Help = "do not output to stdout")]
+	public bool Quiet { get; set; }
 }
