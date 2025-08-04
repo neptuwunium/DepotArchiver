@@ -107,6 +107,7 @@ internal static class Program {
 			var depotKeyPath = depotPath + ".depotkey";
 			if (!File.Exists(depotKeyPath)) {
 				Log.Error("Cannot find Depot Key for {Depot}", Path.GetFileName(depotPath));
+				continue;
 			}
 
 			await using (var stream = new FileStream(depotKeyPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
