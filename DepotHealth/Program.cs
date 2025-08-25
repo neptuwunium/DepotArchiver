@@ -55,6 +55,8 @@ internal static class Program {
 	private static SteamSession? Session { get; set; }
 
 	internal static JsonContext Context { get; } = new([], []);
+	internal static Dictionary<uint, ulong> TotalSize { get; } = [];
+	internal static Dictionary<uint, HashSet<SHA1Hash>> Chunks { get; } = [];
 
 	internal static JsonSerializerOptions JsonOptions { get; } = new() {
 		DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
@@ -124,8 +126,15 @@ internal static class Program {
 			}
 		}
 
-		if (flags.OutputJson && (Context.BadChunks.Count > 0 || Context.Manifests.Count > 0)) {
-			await Console.Error.WriteLineAsync(JsonSerializer.Serialize(Context, JsonOptions));
+		if (flags.OutputJson) {
+			if (Context.BadChunks.Count > 0 || Context.Manifests.Count > 0) {
+				await Console.Error.WriteLineAsync(JsonSerializer.Serialize(Context, JsonOptions));
+			}
+		} else if(TotalSize.Count > 0) {
+			Log.Information("Total Chunk Sizes:");
+			foreach (var (depotId, totalSize) in TotalSize) {
+				Log.Information("\t{DepotId}: {TotalSize}", depotId, totalSize.GetHumanReadableBytes());
+			}
 		}
 
 		try {
@@ -179,17 +188,38 @@ internal static class Program {
 			}
 
 			if (flags.List) {
+				if (!Chunks.TryGetValue(manifest.DepotID, out var manifestChunks)) {
+					manifestChunks = Chunks[manifest.DepotID] = [];
+				}
+
+				var manifestSize = TotalSize.GetValueOrDefault(manifest.DepotID);
+
 				foreach (var file in manifest.Files!.OrderBy(x => x.FileName).Where(f => (f.Flags & EDepotFileFlag.Directory) == 0)) {
 					var hash = MemoryMarshal.Read<SHA1Hash>(file.FileHash);
-					Log.Information("-> {FileName} ({Hash}, Size: {Compressed})", file.FileName, hash, file.TotalSize.GetHumanReadableBytes());
+					if (!flags.OnlySize) {
+						Log.Information("-> {FileName} ({Hash}, Size: {Compressed})", file.FileName, hash, file.TotalSize.GetHumanReadableBytes());
+					}
+
 					manifestContext?.Files.Add(new ManifestFileContext(file.FileName, hash, (ulong) file.Chunks.Sum(x => x.CompressedLength), file.TotalSize, file.Flags));
+
+					foreach (var chunk in file.Chunks) {
+						if (chunk.ChunkID is not { } chunkId) {
+							continue;
+						}
+						var chunkHash = MemoryMarshal.Read<SHA1Hash>(chunkId);
+						if (manifestChunks.Add(chunkHash)) {
+							manifestSize += chunk.CompressedLength;
+						}
+					}
 				}
+
+				TotalSize[manifest.DepotID] = manifestSize;
 			}
 		} else {
 			Log.Information("Processing manifest {Id}", manifest.ManifestGID);
 		}
 
-		if (flags.OnlyInfo) {
+		if (flags.OnlyInfo || flags.OnlySize) {
 			return;
 		}
 

@@ -18,8 +18,11 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("list", Help = "list files from manifests")]
 	public bool List { get; set; }
 
-	[Flag("only-info", Help = "only display metadata and manifest files, don't verify chunks")]
+	[Flag("only-info", Help = "only display metadata, calculate size and manifest files, don't verify chunks")]
 	public bool OnlyInfo { get; set; }
+
+	[Flag("only-size", Help = "only display metadata and calculate size, don't verify chunks")]
+	public bool OnlySize { get; set; }
 
 	[Flag("repair", Help = "attempt to repair chunks by redownloading them")]
 	public bool Repair { get; set; }
