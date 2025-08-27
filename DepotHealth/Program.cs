@@ -130,7 +130,7 @@ internal static class Program {
 			if (Context.BadChunks.Count > 0 || Context.Manifests.Count > 0) {
 				await Console.Error.WriteLineAsync(JsonSerializer.Serialize(Context, JsonOptions));
 			}
-		} else if(TotalSize.Count > 0) {
+		} else if (TotalSize.Count > 0) {
 			Log.Information("Total Chunk Sizes:");
 			foreach (var (depotId, totalSize) in TotalSize) {
 				Log.Information("\t{DepotId}: {TotalSize}", depotId, totalSize.GetHumanReadableBytes());
@@ -206,6 +206,7 @@ internal static class Program {
 						if (chunk.ChunkID is not { } chunkId) {
 							continue;
 						}
+
 						var chunkHash = MemoryMarshal.Read<SHA1Hash>(chunkId);
 						if (manifestChunks.Add(chunkHash)) {
 							manifestSize += chunk.CompressedLength;
@@ -279,16 +280,30 @@ internal static class Program {
 		var (depotId, chunk, chunkPath, manifestId, depotKey) = op;
 		var (compressed, uncompressed) = pair;
 		try {
-			var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
-			using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
-				stream.ReadExactly(compressedSpan);
-			}
+			if (ProgramFlags.Instance.Missing) {
+				var fi = new FileInfo(chunkPath);
+				if (!fi.Exists || fi.Length != chunk.CompressedLength) {
+					Log.Error("Chunk {Chunk}, Depot {Depot}: MISSING", Path.GetFileName(chunkPath), depotId);
+					RepairChunk();
+				}
+			} else {
+				var compressedSpan = compressed.AsSpan(0, (int) chunk.CompressedLength);
+				using (var stream = new FileStream(chunkPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+					stream.ReadExactly(compressedSpan);
+				}
 
-			DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
-			Log.Debug("Chunk {Chunk}, Depot {Depot}: OK", Path.GetFileName(chunkPath), depotId);
+				DepotChunk.Process(chunk, compressedSpan, uncompressed, depotKey);
+				Log.Debug("Chunk {Chunk}, Depot {Depot}: OK", Path.GetFileName(chunkPath), depotId);
+			}
 		} catch {
-			Interlocked.Increment(ref CorruptChunks);
 			Log.Error("Chunk {Chunk}, Depot {Depot}: ERR", Path.GetFileName(chunkPath), depotId);
+			RepairChunk();
+		}
+
+		return (compressed, uncompressed);
+
+		void RepairChunk() {
+			Interlocked.Increment(ref CorruptChunks);
 			var err = $"{manifestId:D},{chunkPath}";
 			if (ProgramFlags.Instance.OutputJson) {
 				Context.BadChunks[depotId].Add(err);
@@ -300,8 +315,6 @@ internal static class Program {
 				Repair(chunkPath, depotId, depotKey, chunk).Wait();
 			}
 		}
-
-		return (compressed, uncompressed);
 	}
 
 	private static async Task Repair(string chunkPath, uint depotId, byte[] depotKey, DepotManifest.ChunkData chunk) {
@@ -310,8 +323,7 @@ internal static class Program {
 		var attempt = 3;
 		while (attempt-- > 0) {
 			// todo: gotta preserve the AppId somehow...
-			// rn just truncating the last digit.
-			var exit = await ChunkDownload.FetchChunk(Session!, chunkPath, depotId / 10 * 10, depotId, depotKey, chunk);
+			var exit = await ChunkDownload.FetchChunk(Session!, chunkPath, 0, depotId, depotKey, chunk);
 			if (exit) {
 				return;
 			}

@@ -18,6 +18,9 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("list", Help = "list files from manifests")]
 	public bool List { get; set; }
 
+	[Flag("missing", Help = "check manifests for missing chunks without actually checking if it's valid")]
+	public bool Missing { get; set; }
+
 	[Flag("only-info", Help = "only display metadata, calculate size and manifest files, don't verify chunks")]
 	public bool OnlyInfo { get; set; }
 
