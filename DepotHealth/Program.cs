@@ -65,6 +65,9 @@ internal static class Program {
 	private static async Task<int> Main() {
 		var flags = ProgramFlags.Instance;
 
+		flags.Attempts = Math.Min(1, flags.Attempts);
+		flags.Delay = Math.Min(1, flags.Delay);
+
 		if (!flags.Quiet) {
 			Log.Logger = new LoggerConfiguration()
 						 .MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information)
@@ -325,7 +328,7 @@ internal static class Program {
 			var chunkId = MemoryMarshal.Read<SHA1Hash>(chunk.ChunkID);
 
 			// todo: gotta preserve the AppId somehow...
-			var exit = await ChunkDownload.FetchChunk(Session!, chunkPath, 0, depotId, depotKey, chunk);
+			var exit = await ChunkDownload.FetchChunk(Session!, chunkPath, 0, depotId, depotKey, chunk, ProgramFlags.Instance.Attempts, ProgramFlags.Instance.Delay);
 			if (exit) {
 				Log.Information("{Current} could not be repaired", chunkId);
 				return;

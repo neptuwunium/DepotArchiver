@@ -56,11 +56,17 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("threads", Help = "number of download threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
-	[Flag("login-id", Extra = NumberStyles.Integer | NumberStyles.AllowHexSpecifier, Help = "the unique login id for login session tracking")]
+	[Flag("login-id", Extra = NumberStyles.HexNumber, Help = "the unique login id for login session tracking")]
 	public uint? LoginId { get; set; }
 
 	[Flag("only-new-manifests", Help = "only process new manifests")]
 	public bool OnlyNew { get; set; }
+
+	[Flag("delay", Help = "the delay between failed requests")]
+	public int Delay { get; set; } = 1;
+
+	[Flag("attempts", Help = "the number of times to attempt servers")]
+	public int Attempts { get; set; } = 3;
 
 	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
 		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);

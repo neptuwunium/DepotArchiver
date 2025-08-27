@@ -38,4 +38,10 @@ internal record ProgramFlags : CommandLineFlags {
 
 	[Flag("quiet", Help = "do not output to stdout")]
 	public bool Quiet { get; set; }
+
+	[Flag("delay", Help = "the delay between failed requests")]
+	public int Delay { get; set; } = 1;
+
+	[Flag("attempts", Help = "the number of times to attempt servers")]
+	public int Attempts { get; set; } = 3;
 }

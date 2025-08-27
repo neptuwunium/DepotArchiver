@@ -15,7 +15,7 @@ public static class ChunkDownload {
 	public static bool ValidateNew { get; set; }
 	public static bool OnlyValidate { get; set; }
 
-	public static async Task<bool> FetchChunk(SteamSession client, string chunkPath, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk) {
+	public static async Task<bool> FetchChunk(SteamSession client, string chunkPath, uint appId, uint depotId, byte[]? depotKey, DepotManifest.ChunkData chunk, int attemptCount, int delay) {
 		var chunkId = Convert.ToHexString(chunk.ChunkID!).ToLowerInvariant();
 		var buffer = ArrayPool<byte>.Shared.Rent((int) chunk.CompressedLength);
 
@@ -64,7 +64,7 @@ public static class ChunkDownload {
 			var server = client.Connections.Connection;
 			SteamContent.CDNAuthToken? cdnToken = null;
 
-			var attempts = client.Connections.Attempts * 2;
+			var attempts = client.Connections.Attempts * attemptCount;
 			var currentAttempt = 0;
 			var isRetry = false;
 			while (currentAttempt++ < attempts) {
@@ -134,10 +134,11 @@ public static class ChunkDownload {
 				isRetry = false;
 				cdnToken = null;
 				server = client.Connections.ExchangeBrokenConnection(server);
+				await Task.Delay(TimeSpan.FromSeconds(delay));
 				continue;
 
 			delay_retry:
-				await Task.Delay(TimeSpan.FromSeconds(1));
+				await Task.Delay(TimeSpan.FromSeconds(delay));
 			retry:
 				isRetry = true;
 			}

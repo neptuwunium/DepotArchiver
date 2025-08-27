@@ -38,6 +38,9 @@ internal static class Program {
 
 		var flags = ProgramFlags.Instance;
 
+		flags.Attempts = Math.Min(1, flags.Attempts);
+		flags.Delay = Math.Min(1, flags.Delay);
+
 		if (flags is { NoAppInfo: true, NoManifests: true, NoDepotKeys: true, NoChunks: true }) {
 			Log.Error("Would do nothing, exiting...");
 			return;
@@ -457,7 +460,7 @@ internal static class Program {
 								while (attempt-- > 0) {
 									var chunkId = Convert.ToHexString(chunk.ChunkID!).ToLowerInvariant();
 									var chunkPath = Path.Combine(depotPath, chunkId);
-									var exit = await ChunkDownload.FetchChunk(client, chunkPath, appId, depotId, depotKey, chunk);
+									var exit = await ChunkDownload.FetchChunk(client, chunkPath, appId, depotId, depotKey, chunk, ProgramFlags.Instance.Attempts, ProgramFlags.Instance.Delay);
 									if (exit && !cts.IsCancellationRequested) {
 										try {
 											await cts.CancelAsync();
