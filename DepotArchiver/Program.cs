@@ -476,7 +476,7 @@ internal static class Program {
 											// ignored
 										}
 									} else {
-										Log.Information("[{Done}/{Total}] {Current}", Interlocked.Increment(ref done), chunks.Length, chunkId);
+										Log.Information("[{Done}/{Total}][{Manifest}] {Current}", Interlocked.Increment(ref done), chunks.Length, manifestId, chunkId);
 										break;
 									}
 								}
