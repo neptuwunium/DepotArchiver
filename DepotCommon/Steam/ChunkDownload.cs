@@ -112,7 +112,7 @@ public static class ChunkDownload {
 							}
 
 							Log.Error("Cannot download chunk {Id} for {DepotId}, got {Code}", chunkId, depotId, ex.StatusCode);
-							return false;
+							return true;
 					}
 
 					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers", chunkId, depotId, ex.StatusCode);
@@ -151,7 +151,7 @@ public static class ChunkDownload {
 			ArrayPool<byte>.Shared.Return(buffer);
 		}
 
-		return false;
+		return true;
 	}
 
 	public static bool ValidateChunk(byte[]? depotKey, DepotManifest.ChunkData chunk, Span<byte> buffer, bool should) {
