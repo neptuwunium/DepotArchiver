@@ -322,13 +322,15 @@ internal static class Program {
 
 		var attempt = 3;
 		while (attempt-- > 0) {
+			var chunkId = MemoryMarshal.Read<SHA1Hash>(chunk.ChunkID);
+
 			// todo: gotta preserve the AppId somehow...
 			var exit = await ChunkDownload.FetchChunk(Session!, chunkPath, 0, depotId, depotKey, chunk);
 			if (exit) {
+				Log.Information("{Current} could not be repaired", chunkId);
 				return;
 			}
 
-			var chunkId = MemoryMarshal.Read<SHA1Hash>(chunk.ChunkID);
 			if (!File.Exists(chunkPath)) {
 				Log.Information("{Current} did not actually download? Retrying...", chunkId);
 				try {
