@@ -99,7 +99,7 @@ public static class ChunkDownload {
 						}
 						case HttpStatusCode.NotFound when isRetry == false: {
 							// this will emit when the cdn isn't warm for this file.
-							Log.Error("Chunk {Id} for {DepotId} is not found, waiting one second...", chunkId, depotId);
+							Log.Error("Chunk {Id} for {DepotId} is not found, waiting for {Delay}s...", chunkId, depotId, delay);
 							goto delay_retry;
 						}
 						case HttpStatusCode.NotFound: {
@@ -115,10 +115,10 @@ public static class ChunkDownload {
 							return !Console.IsErrorRedirected;
 					}
 
-					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers", chunkId, depotId, ex.StatusCode);
+					Log.Error("Chunk {Id} for {DepotId} got {Code}, rotating servers and waiting for {Delay}s...", chunkId, depotId, ex.StatusCode, delay);
 				} catch (OperationCanceledException) {
 					if (!isRetry) {
-						Log.Error("Chunk {Id} for {DepotId} timed out, waiting one second...", chunkId, depotId);
+						Log.Error("Chunk {Id} for {DepotId} timed out, waiting for {Delay}s...", chunkId, depotId, delay);
 						goto delay_retry;
 					}
 
