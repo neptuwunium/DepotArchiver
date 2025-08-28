@@ -32,14 +32,17 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("threads", Help = "number of threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
-	[Flag("append-manifest-id", Help = "Append the manifest id to the file path")]
+	[Flag("append-manifest-id", Help = "append the manifest id to the file path")]
 	public bool AppendManifest { get; set; }
 
-	[Flag("append-depot-id", Help = "Append the depot id to the file path")]
+	[Flag("append-depot-id", Help = "append the depot id to the file path")]
 	public bool AppendDepot { get; set; }
 
-	[Flag("no-clobber", Aliases = ["n"], Help = "Do not overwrite files that already exist")]
+	[Flag("no-clobber", Aliases = ["n"], Help = "do not overwrite files that already exist")]
 	public bool NoClobber { get; set; }
+
+	[Flag("time", Aliases = ["t"], Help = "update file time to the manifest time")]
+	public bool Time { get; set; }
 
 	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
 		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);

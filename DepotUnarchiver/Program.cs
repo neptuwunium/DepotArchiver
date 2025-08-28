@@ -275,6 +275,14 @@ internal static class Program {
 		if (sum > 0) {
 			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.GetHumanReadableBytes(), manifestId, manifest.DepotID);
 		}
+
+		if (ProgramFlags.Instance.Time) {
+			foreach (var path in Directory.EnumerateFiles(targetDirectory).Concat(Directory.EnumerateDirectories(targetDirectory))) {
+				Directory.SetCreationTimeUtc(path, manifest.CreationTime);
+			}
+
+			Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
+		}
 	}
 
 	private static (byte[], byte[]) ProcessChunk(ChunkLoadOp op, ParallelLoopState state, (byte[], byte[]) pool) {
