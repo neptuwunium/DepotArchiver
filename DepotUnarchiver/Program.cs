@@ -6,6 +6,9 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using DepotCommon;
 using DragonLib;
 using Serilog;
 using Serilog.Events;
@@ -192,6 +195,7 @@ internal static class Program {
 			}
 
 			if (flags.NoClobber && Path.Exists(dest)) {
+				Log.Information("Skipping {Path} (already exists)", dest);
 				continue;
 			}
 
@@ -276,16 +280,44 @@ internal static class Program {
 			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.GetHumanReadableBytes(), manifestId, manifest.DepotID);
 		}
 
-		if (ProgramFlags.Instance.Time) {
-			foreach (var path in Directory.EnumerateDirectories(targetDirectory, "*", SearchOption.AllDirectories)) {
-				Directory.SetCreationTimeUtc(path, manifest.CreationTime);
-			}
-
-			foreach (var path in Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)) {
-				File.SetCreationTimeUtc(path, manifest.CreationTime);
-			}
-
+		if (flags.Time) {
 			Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
+		}
+
+		if (flags.Validate || flags.Time) {
+			foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
+				var dest = Path.Combine(targetDirectory, file.FileName);
+				if (string.IsNullOrEmpty(dest)) {
+					continue;
+				}
+
+				if (flags.Time) {
+					if ((file.Flags & EDepotFileFlag.Directory) != 0) {
+						Directory.SetCreationTimeUtc(dest, manifest.CreationTime);
+					} else {
+						File.SetCreationTimeUtc(dest, manifest.CreationTime);
+					}
+				}
+
+				if (flags.Validate) {
+					ValidateFile(file, dest);
+				}
+			}
+		}
+
+		return;
+
+		void ValidateFile(DepotManifest.FileData file, string dest) {
+			if (!flags.Validate || file.FileHash.Length <= 0 || !File.Exists(dest)) {
+				return;
+			}
+
+			var expectedHash = MemoryMarshal.Read<SHA1Hash>(file.FileHash);
+			using var stream = new FileStream(dest, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+			var ourHash = MemoryMarshal.Read<SHA1Hash>(SHA1.HashData(stream));
+			if (ourHash != expectedHash) {
+				Log.Warning("{Path} did not extract correctly!", dest);
+			}
 		}
 	}
 

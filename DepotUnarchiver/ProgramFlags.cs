@@ -44,6 +44,9 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("time", Aliases = ["t"], Help = "update file time to the manifest time")]
 	public bool Time { get; set; }
 
+	[Flag("validate", Help = "validate files after extraction")]
+	public bool Validate { get; set; }
+
 	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
 		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
 		Console.WriteLine("Id Format:");
