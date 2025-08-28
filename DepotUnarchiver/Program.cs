@@ -277,8 +277,12 @@ internal static class Program {
 		}
 
 		if (ProgramFlags.Instance.Time) {
-			foreach (var path in Directory.EnumerateFiles(targetDirectory).Concat(Directory.EnumerateDirectories(targetDirectory))) {
+			foreach (var path in Directory.EnumerateDirectories(targetDirectory, "*", SearchOption.AllDirectories)) {
 				Directory.SetCreationTimeUtc(path, manifest.CreationTime);
+			}
+
+			foreach (var path in Directory.EnumerateFiles(targetDirectory, "*", SearchOption.AllDirectories)) {
+				File.SetCreationTimeUtc(path, manifest.CreationTime);
 			}
 
 			Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
