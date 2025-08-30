@@ -9,6 +9,7 @@ using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using DepotCommon;
+using DepotCommon.Steam;
 using DragonLib;
 using Serilog;
 using Serilog.Events;
@@ -161,7 +162,7 @@ internal static class Program {
 			return;
 		}
 
-		if (!manifest.DecryptFilenames(depotKey)) {
+		if (!manifest.DecryptFilenamesFixed(depotKey)) {
 			Log.Error("Could not decrypt filenames");
 			return;
 		}
@@ -280,27 +281,29 @@ internal static class Program {
 			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.GetHumanReadableBytes(), manifestId, manifest.DepotID);
 		}
 
-		if (flags.Time) {
-			Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
-		}
+		if (Directory.Exists(targetDirectory)) {
+			if (flags.Time) {
+				Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
+			}
 
-		if (flags.Validate || flags.Time) {
-			foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
-				var dest = Path.Combine(targetDirectory, file.FileName);
-				if (string.IsNullOrEmpty(dest)) {
-					continue;
-				}
-
-				if (flags.Time) {
-					if ((file.Flags & EDepotFileFlag.Directory) != 0) {
-						Directory.SetCreationTimeUtc(dest, manifest.CreationTime);
-					} else {
-						File.SetCreationTimeUtc(dest, manifest.CreationTime);
+			if (flags.Validate || flags.Time) {
+				foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
+					var dest = Path.Combine(targetDirectory, file.FileName);
+					if (string.IsNullOrEmpty(dest)) {
+						continue;
 					}
-				}
 
-				if (flags.Validate) {
-					ValidateFile(file, dest);
+					if (flags.Time) {
+						if ((file.Flags & EDepotFileFlag.Directory) != 0) {
+							Directory.SetCreationTimeUtc(dest, manifest.CreationTime);
+						} else {
+							File.SetCreationTimeUtc(dest, manifest.CreationTime);
+						}
+					}
+
+					if (flags.Validate) {
+						ValidateFile(file, dest);
+					}
 				}
 			}
 		}
@@ -308,7 +311,7 @@ internal static class Program {
 		return;
 
 		void ValidateFile(DepotManifest.FileData file, string dest) {
-			if (!flags.Validate || file.FileHash.Length <= 0 || !File.Exists(dest)) {
+			if (!flags.Validate || file.FileHash.Length <= 0 || !File.Exists(dest) || (new FileInfo(dest).Attributes & FileAttributes.ReparsePoint) != 0) {
 				return;
 			}
 

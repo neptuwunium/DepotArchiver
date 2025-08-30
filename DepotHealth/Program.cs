@@ -167,7 +167,7 @@ internal static class Program {
 			}
 
 			try {
-				manifest.DecryptFilenames(depotKey);
+				manifest.DecryptFilenamesFixed(depotKey);
 			} catch {
 				Log.Error("Cannot decrypt manifest {Path}", manifestPath);
 			}
