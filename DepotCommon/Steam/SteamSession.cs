@@ -41,7 +41,6 @@ public sealed class SteamSession : IDisposable {
 
 	public Dictionary<uint, byte[]> DepotKeys { get; } = [];
 	public ConcurrentDictionary<(uint, string), TaskCompletionSource<SteamContent.CDNAuthToken?>> AuthTokens { get; } = [];
-	public List<SteamApps.LicenseListCallback.License> Licenses { get; } = [];
 
 	public SteamClient Client { get; set; }
 	public SteamUser User { get; set; }
@@ -106,9 +105,9 @@ public sealed class SteamSession : IDisposable {
 		var requestCode = await Content.GetManifestRequestCode(depotId, appId, manifestId, branch);
 
 		if (requestCode == 0) {
-			Log.Error("No manifest code was returned for depot {DepotId} and manifest {ManifestId}", depotId, manifestId);
+			Log.Error("No manifest code was returned for depot {DepotId} and manifest {ManifestId} (App {AppId}, Branch {Branch})", depotId, manifestId, appId, branch);
 		} else {
-			Log.Debug("Got manifest request code for depot {DepotId} and manifest {ManifestId}", depotId, manifestId);
+			Log.Debug("Got manifest request code for depot {DepotId} and manifest {ManifestId} (App {AppId}, Branch {Branch})", depotId, manifestId, appId, branch);
 		}
 
 		return requestCode;
