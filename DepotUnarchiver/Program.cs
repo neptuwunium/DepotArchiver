@@ -239,6 +239,10 @@ internal static class Program {
 
 			sum += file.TotalSize;
 
+			if (file.TotalSize == 0) {
+				continue;
+			}
+
 			var memoryMappedFile = MemoryMappedFile.CreateFromFile(dest, FileMode.Open, null, (long) file.TotalSize, MemoryMappedFileAccess.ReadWrite);
 			fileMaps.Add(memoryMappedFile);
 
