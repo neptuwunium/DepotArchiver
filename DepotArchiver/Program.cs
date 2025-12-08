@@ -342,7 +342,9 @@ internal static class Program {
 			} catch (SteamKitWebRequestException ex) {
 				if (ex.StatusCode == HttpStatusCode.Forbidden && cdn.Token == null) {
 					cdn.Token = await client.RequestAuthToken(appId, depotId, cdn.Server);
-					continue;
+					if (cdn.Token is not null) {
+						continue;
+					}
 				}
 
 				if (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized or HttpStatusCode.NotFound) {
