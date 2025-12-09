@@ -20,7 +20,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
+		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
 	</ItemGroup>
 
 </Project>
