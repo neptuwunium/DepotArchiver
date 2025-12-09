@@ -89,20 +89,24 @@ internal static class Program {
 			return;
 		}
 
-		if (!flags.NoAppInfo) {
-			await FetchAppInfo(client, plan, passwords);
-		}
+		try {
+			if (!flags.NoAppInfo) {
+				await FetchAppInfo(client, plan, passwords);
+			}
 
-		if (!flags.NoDepotKeys) {
-			await FetchDepotKeys(client, plan);
-		}
+			if (!flags.NoDepotKeys) {
+				await FetchDepotKeys(client, plan);
+			}
 
-		if (!flags.NoManifests) {
-			await FetchManifests(client, plan);
-		}
+			if (!flags.NoManifests) {
+				await FetchManifests(client, plan);
+			}
 
-		if (!flags.NoChunks) {
-			await FetchChunks(client, plan);
+			if (!flags.NoChunks) {
+				await FetchChunks(client, plan);
+			}
+		} catch (TaskCanceledException) {
+			Log.Warning("Task got cancelled.");
 		}
 
 		try {
