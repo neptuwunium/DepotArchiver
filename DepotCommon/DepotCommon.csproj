@@ -7,7 +7,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>$(DepotTargetFramework)</TargetFramework>
+		<TargetFrameworks>$(DepotTargetFrameworks)</TargetFrameworks>
 		<LangVersion>preview</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>

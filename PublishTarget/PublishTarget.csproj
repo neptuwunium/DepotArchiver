@@ -8,7 +8,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 	<PropertyGroup>
 		<OutputType>library</OutputType>
-		<TargetFramework>$(DepotTargetFramework)</TargetFramework>
+		<TargetFrameworks>$(DepotTargetFrameworks)</TargetFrameworks>
 		<LangVersion>preview</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
