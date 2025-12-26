@@ -53,6 +53,12 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("only-validate", Help = "only validate chunks, do not download")]
 	public bool OnlyValidate { get; set; }
 
+	[Flag("ignore-redist", Help = "Ignore redistributables")]
+	public bool IgnoreRedist { get; set; }
+
+	[Flag("ignore-shared", Help = "Ignore shared depots")]
+	public bool IgnoreSharedDepots { get; set; }
+
 	[Flag("threads", Help = "number of download threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 

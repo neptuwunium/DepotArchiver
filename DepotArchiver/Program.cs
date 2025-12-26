@@ -53,6 +53,14 @@ internal static class Program {
 			return;
 		}
 
+		if (flags.IgnoreRedist) {
+			foreach (var depotId in new uint[] {
+				228980,
+			}) {
+				ignored.Add(depotId);
+			}
+		}
+
 		if (flags.OnlyValidate) {
 			flags.Validate = true;
 		}
@@ -240,14 +248,31 @@ internal static class Program {
 				continue;
 			}
 
+			if (string.IsNullOrEmpty(depot.Name)) {
+				continue;
+			}
+
+			var depotId = uint.Parse(depot.Name);
+
+			if (ignored.Count > 0) {
+				var depotFromApp = depot["depotfromapp"];
+				if (depotFromApp != KeyValue.Invalid && !string.IsNullOrEmpty(depotFromApp.Value)) {
+					var depotFromAppId = uint.Parse(depotFromApp.Value);
+
+					if (ProgramFlags.Instance.IgnoreSharedDepots || ignored.Contains(depotFromAppId)) {
+						ignored.Add(depotId);
+						continue;
+					}
+				}
+			}
+
 			foreach (var branch in manifests.Children) {
 				var gid = branch["gid"];
 
-				if (string.IsNullOrEmpty(gid.Value) || string.IsNullOrEmpty(depot.Name)) {
+				if (string.IsNullOrEmpty(gid.Value)) {
 					continue;
 				}
 
-				var depotId = uint.Parse(depot.Name);
 				var manifestId = ulong.Parse(gid.Value);
 
 				if (ignored.Contains(depotId)) {
