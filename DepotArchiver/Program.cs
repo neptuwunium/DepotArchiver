@@ -29,6 +29,7 @@ using BranchPasswords = System.Collections.Generic.Dictionary<
 		string
 	>
 >;
+using DepotSet = System.Collections.Generic.HashSet<uint>;
 
 namespace DepotArchiver;
 
@@ -46,7 +47,7 @@ internal static class Program {
 			return;
 		}
 
-		var (plan, passwords) = await ParsePlan(flags);
+		var (plan, passwords, ignored) = await ParsePlan(flags);
 		if (plan.Count == 0) {
 			Log.Error("Empty plan.");
 			return;
@@ -91,19 +92,19 @@ internal static class Program {
 
 		try {
 			if (!flags.NoAppInfo) {
-				await FetchAppInfo(client, plan, passwords);
+				await FetchAppInfo(client, plan, passwords, ignored);
 			}
 
 			if (!flags.NoDepotKeys) {
-				await FetchDepotKeys(client, plan);
+				await FetchDepotKeys(client, plan, ignored);
 			}
 
 			if (!flags.NoManifests) {
-				await FetchManifests(client, plan);
+				await FetchManifests(client, plan, ignored);
 			}
 
 			if (!flags.NoChunks) {
-				await FetchChunks(client, plan);
+				await FetchChunks(client, plan, ignored);
 			}
 		} catch (TaskCanceledException) {
 			Log.Warning("Task got cancelled.");
@@ -120,7 +121,7 @@ internal static class Program {
 		loop.Join();
 	}
 
-	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan, BranchPasswords passwords) {
+	private static async Task FetchAppInfo(SteamSession client, DepotPlan plan, BranchPasswords passwords, DepotSet ignored) {
 		var accessTokens = await client.Apps.PICSGetAccessTokens(plan.Keys, []);
 
 		var pics = await client.Apps.PICSGetProductInfo(plan.Keys.Select(x => new SteamApps.PICSRequest(x, accessTokens.AppTokens.GetValueOrDefault(x))), []);
@@ -218,18 +219,18 @@ internal static class Program {
 				app.KeyValues.SaveToFile(target, false);
 				Log.Information("Saved {Id}.vdf", appId);
 
-				await ListDepots(plan, appId, app);
+				await ListDepots(plan, ignored, appId, app);
 			}
 		}
 	}
 
-	private static async Task ListDepots(DepotPlan plan, uint appId, SteamApps.PICSProductInfoCallback.PICSProductInfo app) {
+	private static async Task ListDepots(DepotPlan plan, DepotSet ignored, uint appId, SteamApps.PICSProductInfoCallback.PICSProductInfo app) {
 		if (!plan.TryGetValue(appId, out var appPlan)) {
 			appPlan = []; // realistically should never happen
 		}
 
 		var isBlank = appPlan.Count == 0;
-		var wildcardDepots = new HashSet<uint>();
+		var wildcardDepots = new DepotSet();
 
 		Log.Information("Available depots for app {AppId}", appId);
 		foreach (var depot in app.KeyValues.Children.Where(x => x.Name == "depots").FirstOrDefault(KeyValue.Invalid).Children) {
@@ -248,6 +249,10 @@ internal static class Program {
 
 				var depotId = uint.Parse(depot.Name);
 				var manifestId = ulong.Parse(gid.Value);
+
+				if (ignored.Contains(depotId)) {
+					continue;
+				}
 
 				if (Console.IsErrorRedirected) {
 					await Console.Error.WriteLineAsync($"{appId},{depotId},{manifestId},{branch.Name}");
@@ -273,7 +278,7 @@ internal static class Program {
 		}
 	}
 
-	private static async Task FetchManifests(SteamSession client, DepotPlan plan) {
+	private static async Task FetchManifests(SteamSession client, DepotPlan plan, DepotSet ignored) {
 		var done = new HashSet<(uint, ulong)>();
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 
@@ -281,6 +286,10 @@ internal static class Program {
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var (depotId, manifests) in depot) {
+				if (ignored.Contains(depotId)) {
+					continue;
+				}
+
 				var manifestRootPath = Path.Combine(output, depotId.ToString("D", CultureInfo.InvariantCulture), "manifest");
 				Directory.CreateDirectory(manifestRootPath);
 
@@ -366,8 +375,8 @@ internal static class Program {
 		}
 	}
 
-	private static async Task FetchDepotKeys(SteamSession client, DepotPlan plan) {
-		var done = new HashSet<uint>();
+	private static async Task FetchDepotKeys(SteamSession client, DepotPlan plan, DepotSet ignored) {
+		var done = new DepotSet();
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 
@@ -375,6 +384,10 @@ internal static class Program {
 
 		foreach (var (appId, depot) in plan) {
 			foreach (var depotId in depot.Keys.Where(depotId => done.Add(depotId))) {
+				if (ignored.Contains(depotId)) {
+					continue;
+				}
+
 				var keyPath = Path.Combine(output, $"{depotId.ToString("D", CultureInfo.InvariantCulture)}.depotkey");
 				if (File.Exists(keyPath)) {
 					continue;
@@ -395,7 +408,7 @@ internal static class Program {
 		}
 	}
 
-	private static async Task FetchChunks(SteamSession client, DepotPlan plan) {
+	private static async Task FetchChunks(SteamSession client, DepotPlan plan, DepotSet ignored) {
 		var output = Path.GetFullPath(ProgramFlags.Instance.TargetDirectory);
 		Directory.CreateDirectory(output);
 		Log.Information("Saving chunks to {Path}", output);
@@ -411,7 +424,7 @@ internal static class Program {
 		try {
 			foreach (var (appId, depot) in plan) {
 				foreach (var (depotId, manifests) in depot) {
-					if (manifests.Count == 0) {
+					if (manifests.Count == 0 || ignored.Contains(depotId)) {
 						continue;
 					}
 
@@ -540,9 +553,10 @@ internal static class Program {
 		return false;
 	}
 
-	private static async Task<(DepotPlan, BranchPasswords)> ParsePlan(ProgramFlags flags) {
+	private static async Task<(DepotPlan, BranchPasswords, DepotSet)> ParsePlan(ProgramFlags flags) {
 		var plan = new DepotPlan();
 		var passwords = new BranchPasswords();
+		var ignoredDepots = new DepotSet();
 		if (!File.Exists(flags.ArchivePlanFile)) {
 			if (uint.TryParse(flags.ArchivePlanFile, NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
 				plan[appId] = [];
@@ -550,7 +564,7 @@ internal static class Program {
 				Log.Error("Cannot open {Path}", flags.ArchivePlanFile);
 			}
 
-			return (plan, passwords);
+			return (plan, passwords, ignoredDepots);
 		}
 
 		await using var stream = new FileStream(flags.ArchivePlanFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -570,8 +584,19 @@ internal static class Program {
 
 			var parts = line.Split(',', 4, StringSplitOptions.TrimEntries);
 
+			var ignored = false;
+			if (parts[0].StartsWith('!')) {
+				parts[0] = parts[0][1..];
+				ignored = true;
+			}
+
 			if (!uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
 				Log.Error("Cannot parse line {Parts} (invalid app id {id})", line, parts[0]);
+				continue;
+			}
+
+			if (ignored) {
+				ignoredDepots.Add(appId);
 				continue;
 			}
 
@@ -616,7 +641,7 @@ internal static class Program {
 			depot[manifestId] = branch;
 		}
 
-		return (plan, passwords);
+		return (plan, passwords, ignoredDepots);
 	}
 
 	private class ContentContext(SteamContent.CDNAuthToken? token, Server server) {
