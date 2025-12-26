@@ -11,37 +11,46 @@ namespace DepotCommon.Steam;
 
 [ProtoContract]
 public class ConfigStore {
-	public ConfigStore() {
-		LoginTokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-		GuardData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-	}
-
 	[ProtoMember(100, IsRequired = false)]
-	public Dictionary<string, string> LoginTokens { get; private set; }
+	public Dictionary<string, string> LoginTokens { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
 	[ProtoMember(101, IsRequired = false)]
-	public Dictionary<string, string> GuardData { get; private set; }
+	public Dictionary<string, string> GuardData { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
 	private static IsolatedStorageFile IsolatedStorage { get; } = IsolatedStorageFile.GetUserStoreForAssembly();
 
+	private static bool WriteLocal { get; } = Environment.GetEnvironmentVariable("DEPOTARCHIVER_USE_ISOLATED_STORAGE") == null;
+	private static string ConfigName { get; } = "archiver.config";
+	private static string ConfigDir { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DepotArchiver");
+	private static string LocalPath { get; } = Path.Combine(ConfigDir, ConfigName);
+
 	public static ConfigStore Instance {
 		get {
-			if ((ConfigStore?) field != null) {
+			if (field != null) {
 				return field;
 			}
 
-			if (IsolatedStorage.FileExists("archiver.config")) {
+			if (WriteLocal && File.Exists(LocalPath)) {
 				try {
-					using var fs = IsolatedStorage.OpenFile("archiver.config", FileMode.Open, FileAccess.Read);
-					using var ds = new DeflateStream(fs, CompressionMode.Decompress);
-					field = Serializer.Deserialize<ConfigStore>(ds);
+					using var fs = new FileStream(LocalPath, FileMode.Open, FileAccess.Read);
+					field = LoadInner(fs);
 				} catch (Exception ex) {
 					Log.Error(ex, "Failed to load config store");
-					field = new ConfigStore();
 				}
-			} else {
-				field = new ConfigStore();
+			} else if (IsolatedStorage.FileExists(ConfigName)) {
+				try {
+					using var fs = IsolatedStorage.OpenFile(ConfigName, FileMode.Open, FileAccess.Read);
+					field = LoadInner(fs);
+
+					if (WriteLocal) {
+						field.Save(); // resave to local storage.
+					}
+				} catch (Exception ex) {
+					Log.Error(ex, "Failed to load config store");
+				}
 			}
+
+			field ??= new ConfigStore();
 
 			return field;
 		}
@@ -49,11 +58,29 @@ public class ConfigStore {
 
 	public void Save() {
 		try {
-			using var fs = IsolatedStorage.OpenFile("archiver.config", FileMode.Create, FileAccess.Write);
-			using var ds = new DeflateStream(fs, CompressionMode.Compress);
-			Serializer.Serialize(ds, this);
+			if (WriteLocal) {
+				using var fs = IsolatedStorage.OpenFile(ConfigName, FileMode.Create, FileAccess.ReadWrite);
+				SaveInner(fs);
+			} else {
+				if (!Directory.Exists(ConfigDir)) {
+					Directory.CreateDirectory(ConfigDir);
+				}
+
+				using var fs = new FileStream(LocalPath, FileMode.Create, FileAccess.ReadWrite);
+				SaveInner(fs);
+			}
 		} catch (Exception ex) {
 			Log.Error(ex, "Failed to save config store");
 		}
+	}
+
+	public static ConfigStore LoadInner(Stream fs) {
+		using var ds = new DeflateStream(fs, CompressionMode.Decompress);
+		return Serializer.Deserialize<ConfigStore>(ds);
+	}
+
+	public void SaveInner(Stream fs) {
+		using var ds = new DeflateStream(fs, CompressionMode.Compress);
+		Serializer.Serialize(ds, this);
 	}
 }
