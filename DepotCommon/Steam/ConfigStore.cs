@@ -17,7 +17,7 @@ public class ConfigStore {
 	[ProtoMember(101, IsRequired = false)]
 	public Dictionary<string, string> GuardData { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
-	private static IsolatedStorageFile IsolatedStorage { get; } = IsolatedStorageFile.GetUserStoreForAssembly();
+	private static Lazy<IsolatedStorageFile> IsolatedStorage { get; } = new(IsolatedStorageFile.GetUserStoreForAssembly);
 
 	private static bool WriteLocal { get; } = Environment.GetEnvironmentVariable("DEPOTARCHIVER_USE_ISOLATED_STORAGE") == null;
 	private static string ConfigName { get; } = "archiver.config";
@@ -37,9 +37,9 @@ public class ConfigStore {
 				} catch (Exception ex) {
 					Log.Error(ex, "Failed to load config store");
 				}
-			} else if (IsolatedStorage.FileExists(ConfigName)) {
+			} else if (IsolatedStorage.Value.FileExists(ConfigName)) {
 				try {
-					using var fs = IsolatedStorage.OpenFile(ConfigName, FileMode.Open, FileAccess.Read);
+					using var fs = IsolatedStorage.Value.OpenFile(ConfigName, FileMode.Open, FileAccess.Read);
 					field = LoadInner(fs);
 
 					if (WriteLocal) {
@@ -59,7 +59,7 @@ public class ConfigStore {
 	public void Save() {
 		try {
 			if (WriteLocal) {
-				using var fs = IsolatedStorage.OpenFile(ConfigName, FileMode.Create, FileAccess.ReadWrite);
+				using var fs = IsolatedStorage.Value.OpenFile(ConfigName, FileMode.Create, FileAccess.ReadWrite);
 				SaveInner(fs);
 			} else {
 				if (!Directory.Exists(ConfigDir)) {
