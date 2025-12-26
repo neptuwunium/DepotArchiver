@@ -16,9 +16,10 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DepotArchiver\DepotArchiver.csproj"/>
-		<ProjectReference Include="..\DepotUnarchiver\DepotUnarchiver.csproj"/>
-		<ProjectReference Include="..\DepotHealth\DepotHealth.csproj"/>
+		<ProjectReference Include="../DepotArchiver/DepotArchiver.csproj"/>
+		<ProjectReference Include="../DepotACF/DepotACF.csproj" />
+		<ProjectReference Include="../DepotUnarchiver/DepotUnarchiver.csproj"/>
+		<ProjectReference Include="../DepotHealth/DepotHealth.csproj"/>
 	</ItemGroup>
 
 </Project>

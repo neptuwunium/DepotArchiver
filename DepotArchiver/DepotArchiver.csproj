@@ -16,7 +16,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DepotCommon\DepotCommon.csproj" />
+		<ProjectReference Include="../DepotCommon/DepotCommon.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

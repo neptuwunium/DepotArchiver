@@ -15,7 +15,7 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\DragonLib\DragonLib\DragonLib.csproj"/>
+		<ProjectReference Include="../DragonLib/DragonLib/DragonLib.csproj"/>
 	</ItemGroup>
 
 	<ItemGroup>

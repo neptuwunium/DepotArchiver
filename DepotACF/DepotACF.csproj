@@ -19,8 +19,4 @@ SPDX-License-Identifier: GPL-2.0-or-later
 		<ProjectReference Include="../DepotCommon/DepotCommon.csproj"/>
 	</ItemGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
-	</ItemGroup>
-
 </Project>
