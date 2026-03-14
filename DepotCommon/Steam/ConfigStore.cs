@@ -54,19 +54,19 @@ public class ConfigStore {
 
 			return field;
 		}
-	} = null!;
+	}
 
 	public void Save() {
 		try {
 			if (WriteLocal) {
-				using var fs = IsolatedStorage.Value.OpenFile(ConfigName, FileMode.Create, FileAccess.ReadWrite);
-				SaveInner(fs);
-			} else {
 				if (!Directory.Exists(ConfigDir)) {
 					Directory.CreateDirectory(ConfigDir);
 				}
 
 				using var fs = new FileStream(LocalPath, FileMode.Create, FileAccess.ReadWrite);
+				SaveInner(fs);
+			} else {
+				using var fs = IsolatedStorage.Value.OpenFile(ConfigName, FileMode.Create, FileAccess.ReadWrite);
 				SaveInner(fs);
 			}
 		} catch (Exception ex) {
@@ -80,6 +80,7 @@ public class ConfigStore {
 	}
 
 	public void SaveInner(Stream fs) {
+		fs.SetLength(0);
 		using var ds = new DeflateStream(fs, CompressionMode.Compress);
 		Serializer.Serialize(ds, this);
 	}

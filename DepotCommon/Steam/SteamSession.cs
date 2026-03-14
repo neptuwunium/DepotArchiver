@@ -297,7 +297,7 @@ public sealed class SteamSession : IDisposable {
 					Reconnect();
 					return;
 				case EResult.ServiceUnavailable:
-					Log.Information("Unable to login to Steam3: {Result}", loggedOn.Result);
+					Log.Information("Unable to login to Steam3 (unavailable): {Result}", loggedOn.Result);
 					Abort(false);
 					return;
 			}
@@ -305,6 +305,7 @@ public sealed class SteamSession : IDisposable {
 			if (loggedOn.Result != EResult.OK) {
 				if (!string.IsNullOrEmpty(Details.Username) && RememberPassword) {
 					ConfigStore.Instance.LoginTokens.Remove(Details.Username);
+					ConfigStore.Instance.GuardData.Remove(Details.Username);
 					ConfigStore.Instance.Save();
 				}
 
