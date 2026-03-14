@@ -4,8 +4,8 @@
 
 namespace DepotACF;
 
-class Program {
-	static void Main(string[] args) {
+internal static class Program {
+	private static void Main() {
 		Console.WriteLine("Hello, World!");
 	}
 }

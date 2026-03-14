@@ -79,7 +79,7 @@ public static class DepotManifestExtensions {
 			try {
 				var encryptedFilename = bufferDecoded.AsSpan()[..decodedLength];
 				aes.DecryptEcb(encryptedFilename[..iv.Length], iv, PaddingMode.None);
-				filenameLength = aes.DecryptCbc(encryptedFilename[iv.Length..], iv, bufferDecrypted, PaddingMode.PKCS7);
+				filenameLength = aes.DecryptCbc(encryptedFilename[iv.Length..], iv, bufferDecrypted);
 			} catch (Exception) {
 				DebugLog.Assert(false, nameof(DepotManifest), "Failed to decrypt the filename.");
 				return false;

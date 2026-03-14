@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using DepotCommon;
 using DepotCommon.Steam;
-using DragonLib;
+using DragonLib.Extensions;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -282,7 +282,7 @@ internal static class Program {
 		}
 
 		if (sum > 0) {
-			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.GetHumanReadableBytes(), manifestId, manifest.DepotID);
+			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.HumanReadableBytes, manifestId, manifest.DepotID);
 		}
 
 		if (Directory.Exists(targetDirectory)) {

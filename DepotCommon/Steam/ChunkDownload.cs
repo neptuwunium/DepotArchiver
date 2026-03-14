@@ -97,7 +97,7 @@ public static class ChunkDownload {
 							cdnToken = await client.RequestAuthToken(appId, depotId, server);
 							goto retry;
 						}
-						case HttpStatusCode.NotFound when isRetry == false: {
+						case HttpStatusCode.NotFound when !isRetry: {
 							// this will emit when the cdn isn't warm for this file.
 							Log.Error("Chunk {Id} for {DepotId} is not found, waiting for {Delay}s...", chunkId, depotId, delay);
 							goto delay_retry;

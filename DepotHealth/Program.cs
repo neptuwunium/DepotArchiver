@@ -9,7 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DepotCommon;
 using DepotCommon.Steam;
-using DragonLib;
+using DragonLib.Extensions;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -136,7 +136,7 @@ internal static class Program {
 		} else if (TotalSize.Count > 0) {
 			Log.Information("Total Chunk Sizes:");
 			foreach (var (depotId, totalSize) in TotalSize) {
-				Log.Information("\t{DepotId}: {TotalSize}", depotId, totalSize.GetHumanReadableBytes());
+				Log.Information("\t{DepotId}: {TotalSize}", depotId, totalSize.HumanReadableBytes);
 			}
 		}
 
@@ -179,7 +179,7 @@ internal static class Program {
 	private static void ProcessDepotManifest(DepotManifest manifest, string depotPath, byte[] depotKey, HashSet<SHA1Hash> processedChunks) {
 		var flags = ProgramFlags.Instance;
 		if (flags.Meta) {
-			Log.Information("Depot: {DepotId}; Manifest: {Id}; Size: {Compressed} ({Uncompressed})", manifest.DepotID, manifest.ManifestGID, manifest.TotalCompressedSize.GetHumanReadableBytes(), manifest.TotalUncompressedSize.GetHumanReadableBytes());
+			Log.Information("Depot: {DepotId}; Manifest: {Id}; Size: {Compressed} ({Uncompressed})", manifest.DepotID, manifest.ManifestGID, manifest.TotalCompressedSize.HumanReadableBytes, manifest.TotalUncompressedSize.HumanReadableBytes);
 			ManifestContext? manifestContext = null;
 
 			if (flags.OutputJson) {
@@ -200,7 +200,7 @@ internal static class Program {
 				foreach (var file in manifest.Files!.OrderBy(x => x.FileName).Where(f => (f.Flags & EDepotFileFlag.Directory) == 0)) {
 					var hash = MemoryMarshal.Read<SHA1Hash>(file.FileHash);
 					if (!flags.OnlySize) {
-						Log.Information("-> {FileName} ({Hash}, Size: {Compressed})", file.FileName, hash, file.TotalSize.GetHumanReadableBytes());
+						Log.Information("-> {FileName} ({Hash}, Size: {Compressed})", file.FileName, hash, file.TotalSize.HumanReadableBytes);
 					}
 
 					manifestContext?.Files.Add(new ManifestFileContext(file.FileName, hash, (ulong) file.Chunks.Sum(x => x.CompressedLength), file.TotalSize, file.Flags));

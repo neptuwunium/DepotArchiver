@@ -11,7 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DepotCommon;
 using DepotCommon.Steam;
-using DragonLib;
+using DragonLib.Extensions;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -492,7 +492,7 @@ internal static class Program {
 											 .ToArray();
 
 						if (chunks.Length > 0) {
-							Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).GetHumanReadableBytes());
+							Log.Information("Beginning {Type} of {Manifest} for {Depot} ({Size})", ProgramFlags.Instance.OnlyValidate ? "validation" : "download", manifestId, depotId, chunks.Sum(x => x.UncompressedLength).HumanReadableBytes);
 
 							var done = 0;
 							await Parallel.ForEachAsync(chunks, parallelOptions, async (chunk, ct) => {

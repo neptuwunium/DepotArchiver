@@ -9,7 +9,9 @@ using DragonLib.CommandLine;
 namespace DepotUnarchiver;
 
 internal record ProgramFlags : CommandLineFlags {
-	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>();
+	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(new CommandLineOptions {
+		HelpDelegate = PrintHelp,
+	});
 
 	[Flag("output", Help = "the directory to save files in")]
 	public string TargetDirectory { get; set; } = "game";
