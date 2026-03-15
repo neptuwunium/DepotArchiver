@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DepotCommon;
 using DepotCommon.Steam;
+using DragonLib;
 using DragonLib.Extensions;
 using Serilog;
 using Serilog.Events;
@@ -35,6 +36,7 @@ namespace DepotArchiver;
 
 internal static class Program {
 	private static async Task Main() {
+		Helpers.ResetCulture();
 		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
 
 		var flags = ProgramFlags.Instance;

@@ -4,11 +4,12 @@
 
 using System.Reflection;
 using System.Text.RegularExpressions;
+using DepotCommon;
 using DragonLib.CommandLine;
 
 namespace DepotUnarchiver;
 
-internal record ProgramFlags : CommandLineFlags {
+internal record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
 	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(new CommandLineOptions {
 		HelpDelegate = PrintHelp,
 	});

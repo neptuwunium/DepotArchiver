@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DepotCommon;
 using DepotCommon.Steam;
+using DragonLib;
 using DragonLib.Extensions;
 using Serilog;
 using Serilog.Events;
@@ -63,6 +64,7 @@ internal static class Program {
 	};
 
 	private static async Task<int> Main() {
+		Helpers.ResetCulture();
 		var flags = ProgramFlags.Instance;
 
 		flags.Attempts = Math.Min(1, flags.Attempts);
@@ -167,7 +169,7 @@ internal static class Program {
 			}
 
 			try {
-				manifest.DecryptFilenamesFixed(depotKey);
+				manifest.DecryptFilenames(depotKey);
 			} catch {
 				Log.Error("Cannot decrypt manifest {Path}", manifestPath);
 			}
