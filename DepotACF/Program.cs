@@ -38,66 +38,12 @@ internal static class Program {
 		}
 
 		var selectedApp = SelectApp(apps);
-
 		var selectedManifests = SelectDepots(depotsPath, selectedApp);
+		var (installedDepots, installScriptsKv) = UnarchiveApp(appsPath, selectedApp, selectedManifests, depotsPath);
+		WriteACF(installedDepots, selectedApp, selectedManifests, installScriptsKv, appsPath);
+	}
 
-		var (installedDepots, installScriptsKv) =
-			Term.Progress()
-				.Columns(
-					new TaskDescriptionColumn(),
-					new ProgressBarColumn(),
-					new PercentageColumn(),
-					new ElapsedTimeColumn(),
-					new SpinnerColumn())
-				.AutoRefresh(true)
-				.AutoClear(true)
-				.Start(ctx => {
-					var appPath = Path.Combine(appsPath, "common", selectedApp.InstallDir);
-					var installedDepots = new List<KeyValue>();
-					var installScriptsKv = new KeyValue("InstallScripts");
-
-					foreach (var (depotId, manifestInfo) in selectedManifests) {
-						var task = ctx.AddTask($"[cyan]Writing {depotId}[/]");
-
-						var manifestPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture), "manifest");
-						var keyPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture) + ".depotkey");
-						var depotPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture));
-						Unarchive.ProcessManifest(ProgramFlags.Instance, appPath, manifestPath, manifestInfo.Id, keyPath, depotPath);
-
-						var depotInfo = new KeyValue(depotId.ToString(CultureInfo.InvariantCulture));
-						depotInfo.Children.AddRange([
-							new KeyValue("manifest", manifestInfo.Id.ToString(CultureInfo.InvariantCulture)),
-							new KeyValue("size", manifestInfo.Manifest.TotalUncompressedSize.ToString(CultureInfo.InvariantCulture)),
-						]);
-						installedDepots.Add(depotInfo);
-
-						var installScripts = new List<string>();
-						foreach (var file in manifestInfo.Manifest.Files ?? []) {
-							if ((file.Flags & EDepotFileFlag.InstallScript) == 0) {
-								continue;
-							}
-
-							installScripts.Add(file.FileName);
-						}
-
-						if (installScripts.Count > 0) {
-							if (installScripts.Count == 1) {
-								installScriptsKv.Children.Add(new KeyValue(depotId.ToString(CultureInfo.InvariantCulture), installScripts[0]));
-							} else {
-								var depotInstallScripts = new KeyValue(depotId.ToString(CultureInfo.InvariantCulture));
-								installScriptsKv.Children.Add(depotInstallScripts);
-								for (var index = 0; index < installScripts.Count; index++) {
-									depotInstallScripts.Children.Add(new KeyValue(index.ToString(CultureInfo.InvariantCulture), installScripts[index]));
-								}
-							}
-						}
-
-						ctx.RemoveTask(task);
-					}
-
-					return (installedDepots, installScriptsKv);
-				});
-
+	private static void WriteACF(List<KeyValue> installedDepots, AppInfo selectedApp, Dictionary<uint, ManifestInfo> selectedManifests, KeyValue installScriptsKv, string appsPath) {
 		var acf = new KeyValue("AppState");
 		var installedDepotsKv = new KeyValue("InstalledDepots");
 		installedDepotsKv.Children.AddRange(installedDepots);
@@ -133,6 +79,63 @@ internal static class Program {
 
 		acf.SaveToFile(Path.Combine(appsPath, $"appmanifest_{selectedApp.Id}.acf"), false);
 	}
+
+	private static (List<KeyValue> installedDepots, KeyValue installScriptsKv) UnarchiveApp(string appsPath, AppInfo selectedApp, Dictionary<uint, ManifestInfo> selectedManifests, string depotsPath) =>
+		Term.Progress()
+			.Columns(
+				new TaskDescriptionColumn(),
+				new ProgressBarColumn(),
+				new PercentageColumn(),
+				new ElapsedTimeColumn(),
+				new SpinnerColumn())
+			.AutoRefresh(true)
+			.AutoClear(true)
+			.Start(ctx => {
+				var appPath = Path.Combine(appsPath, "common", selectedApp.InstallDir);
+				var installedDepots = new List<KeyValue>();
+				var installScriptsKv = new KeyValue("InstallScripts");
+
+				foreach (var (depotId, manifestInfo) in selectedManifests) {
+					var task = ctx.AddTask($"[cyan]Writing {depotId}[/]");
+
+					var manifestPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture), "manifest");
+					var keyPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture) + ".depotkey");
+					var depotPath = Path.Combine(depotsPath, depotId.ToString(CultureInfo.InvariantCulture));
+					Unarchive.ProcessManifest(ProgramFlags.Instance, appPath, manifestPath, manifestInfo.Id, keyPath, depotPath);
+
+					var depotInfo = new KeyValue(depotId.ToString(CultureInfo.InvariantCulture));
+					depotInfo.Children.AddRange([
+						new KeyValue("manifest", manifestInfo.Id.ToString(CultureInfo.InvariantCulture)),
+						new KeyValue("size", manifestInfo.Manifest.TotalUncompressedSize.ToString(CultureInfo.InvariantCulture)),
+					]);
+					installedDepots.Add(depotInfo);
+
+					var installScripts = new List<string>();
+					foreach (var file in manifestInfo.Manifest.Files ?? []) {
+						if ((file.Flags & EDepotFileFlag.InstallScript) == 0) {
+							continue;
+						}
+
+						installScripts.Add(file.FileName);
+					}
+
+					if (installScripts.Count > 0) {
+						if (installScripts.Count == 1) {
+							installScriptsKv.Children.Add(new KeyValue(depotId.ToString(CultureInfo.InvariantCulture), installScripts[0]));
+						} else {
+							var depotInstallScripts = new KeyValue(depotId.ToString(CultureInfo.InvariantCulture));
+							installScriptsKv.Children.Add(depotInstallScripts);
+							for (var index = 0; index < installScripts.Count; index++) {
+								depotInstallScripts.Children.Add(new KeyValue(index.ToString(CultureInfo.InvariantCulture), installScripts[index]));
+							}
+						}
+					}
+
+					ctx.RemoveTask(task);
+				}
+
+				return (installedDepots, installScriptsKv);
+			});
 
 	private static Dictionary<uint, ManifestInfo> SelectDepots(string depotsPath, AppInfo selectedApp) {
 		Term.MarkupLine($"[cyan]Selected App:[/] {selectedApp}");
