@@ -640,6 +640,10 @@ internal static class Program {
 			var manifestId = 0ul;
 			var branch = parts.ElementAtOrDefault(3) ?? "public";
 
+			if (branch == "_steamdb_external_") {
+				branch = "public";
+			}
+
 			switch (parts.Length) {
 				case > 1 when !uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out depotId):
 					Log.Error("Cannot parse line {Parts} (invalid depot id {id})", line, parts[1]);

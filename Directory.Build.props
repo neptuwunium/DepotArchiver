@@ -7,6 +7,6 @@ SPDX-License-Identifier: GPL-2.0-or-later
 <Project>
 	<PropertyGroup>
 		<DepotTargetFrameworks>net10.0</DepotTargetFrameworks>
-		<DepotArchiverVersion>1.3.0</DepotArchiverVersion>
+		<DepotArchiverVersion>1.3.1</DepotArchiverVersion>
 	</PropertyGroup>
 </Project>
