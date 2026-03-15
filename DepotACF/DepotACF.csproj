@@ -19,4 +19,8 @@ SPDX-License-Identifier: GPL-2.0-or-later
 		<ProjectReference Include="../DepotCommon/DepotCommon.csproj"/>
 	</ItemGroup>
 
+	<ItemGroup>
+		<PackageReference Include="Spectre.Console" Version="0.54.1-alpha.0.79"/>
+	</ItemGroup>
+
 </Project>
