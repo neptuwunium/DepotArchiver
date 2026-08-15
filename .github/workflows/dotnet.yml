@@ -19,8 +19,8 @@ jobs:
             -   uses: actions/setup-dotnet@v4
                 with:
                     dotnet-version: 10.x
-            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Runtime/${{matrix.rid}} -f net10.0 -r ${{ matrix.rid }}
-            -   run: dotnet publish PublishTarget -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Standalone/${{matrix.rid}} -f net10.0 -r ${{ matrix.rid }} --sc
+            -   run: dotnet publish project.traversal -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Runtime/${{matrix.rid}} -f net10.0 -r ${{ matrix.rid }}
+            -   run: dotnet publish project.traversal -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Standalone/${{matrix.rid}} -f net10.0 -r ${{ matrix.rid }} --sc
             -   uses: actions/upload-artifact@v4
                 with:
                     name: DepotArchiver-${{ matrix.rid }}

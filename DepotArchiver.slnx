@@ -11,5 +11,4 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	<Project Path="DepotHealth/DepotHealth.csproj" />
 	<Project Path="DepotUnarchiver/DepotUnarchiver.csproj" />
 	<Project Path="DragonLib/DragonLib/DragonLib.csproj" />
-	<Project Path="PublishTarget/PublishTarget.csproj" />
 </Solution>
