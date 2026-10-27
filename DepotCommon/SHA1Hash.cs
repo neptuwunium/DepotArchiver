@@ -9,8 +9,7 @@ using System.Text.Json.Serialization;
 
 namespace DepotCommon;
 
-[StructLayout(LayoutKind.Sequential, Pack = 1)] [InlineArray(20)]
-[JsonConverter(typeof(SHA1HashConverter))]
+[StructLayout(LayoutKind.Sequential, Pack = 1), InlineArray(20), JsonConverter(typeof(SHA1HashConverter))]
 public struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 	public byte Value;
 
@@ -27,13 +26,9 @@ public struct SHA1Hash : IEquatable<SHA1Hash>, IComparable<SHA1Hash> {
 
 	public override string ToString() => Convert.ToHexString(this).ToLowerInvariant();
 
-	public static bool operator ==(SHA1Hash left, SHA1Hash right) {
-		return left.Equals(right);
-	}
+	public static bool operator ==(SHA1Hash left, SHA1Hash right) => left.Equals(right);
 
-	public static bool operator !=(SHA1Hash left, SHA1Hash right) {
-		return !(left == right);
-	}
+	public static bool operator !=(SHA1Hash left, SHA1Hash right) => !(left == right);
 }
 
 public class SHA1HashConverter : JsonConverter<SHA1Hash> {

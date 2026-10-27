@@ -4,13 +4,14 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DepotCommon;
 using DepotCommon.Steam;
-using DragonLib;
-using DragonLib.Extensions;
+using Pluto;
+using Pluto.Extensions;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -73,7 +74,7 @@ internal static class Program {
 		if (!flags.Quiet) {
 			Log.Logger = new LoggerConfiguration()
 						 .MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information)
-						 .WriteTo.Console().CreateLogger();
+						 .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture).CreateLogger();
 		}
 
 		Thread? loop = null;

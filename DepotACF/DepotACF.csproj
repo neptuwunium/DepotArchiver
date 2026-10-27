@@ -17,10 +17,11 @@ SPDX-License-Identifier: GPL-2.0-or-later
 
 	<ItemGroup>
 		<ProjectReference Include="../DepotCommon/DepotCommon.csproj"/>
+		<ProjectReference Include="../Neptune/Pluto.SourceGen/Pluto.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Spectre.Console" Version="0.57.2" />
+		<PackageReference Include="Spectre.Console" Version="0.57.2"/>
 	</ItemGroup>
 
 </Project>

@@ -11,8 +11,8 @@ using System.Security.Cryptography;
 using System.Text;
 using DepotCommon;
 using DepotCommon.Steam;
-using DragonLib;
-using DragonLib.Extensions;
+using Pluto;
+using Pluto.Extensions;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -37,7 +37,7 @@ namespace DepotArchiver;
 internal static class Program {
 	private static async Task Main() {
 		Helpers.ResetCulture();
-		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
+		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console(formatProvider: CultureInfo.InvariantCulture).CreateLogger();
 
 		var flags = ProgramFlags.Instance;
 
@@ -51,7 +51,7 @@ internal static class Program {
 
 		var (plan, passwords, ignored) = await ParsePlan(flags);
 		if (plan.Count == 0) {
-			Log.Error("Empty plan.");
+			Log.Error("Empty plan");
 			return;
 		}
 
@@ -117,7 +117,7 @@ internal static class Program {
 				await FetchChunks(client, plan, ignored);
 			}
 		} catch (TaskCanceledException) {
-			Log.Warning("Task got cancelled.");
+			Log.Warning("Task got cancelled");
 		}
 
 		try {
@@ -254,12 +254,12 @@ internal static class Program {
 				continue;
 			}
 
-			var depotId = uint.Parse(depot.Name);
+			var depotId = uint.Parse(depot.Name, CultureInfo.InvariantCulture);
 
 			if (ignored.Count > 0) {
 				var depotFromApp = depot["depotfromapp"];
 				if (depotFromApp != KeyValue.Invalid && !string.IsNullOrEmpty(depotFromApp.Value)) {
-					var depotFromAppId = uint.Parse(depotFromApp.Value);
+					var depotFromAppId = uint.Parse(depotFromApp.Value, CultureInfo.InvariantCulture);
 
 					if (ProgramFlags.Instance.IgnoreSharedDepots || ignored.Contains(depotFromAppId)) {
 						ignored.Add(depotId);
@@ -275,7 +275,7 @@ internal static class Program {
 					continue;
 				}
 
-				var manifestId = ulong.Parse(gid.Value);
+				var manifestId = ulong.Parse(gid.Value, CultureInfo.InvariantCulture);
 
 				if (ignored.Contains(depotId)) {
 					continue;
@@ -410,7 +410,7 @@ internal static class Program {
 		Log.Information("Saving depot keys to {Path}", output);
 
 		foreach (var (appId, depot) in plan) {
-			foreach (var depotId in depot.Keys.Where(depotId => done.Add(depotId))) {
+			foreach (var depotId in depot.Keys.Where(done.Add)) {
 				if (ignored.Contains(depotId)) {
 					continue;
 				}
@@ -573,11 +573,7 @@ internal static class Program {
 			return true;
 		}
 
-		if (fileInfo.Length != chunk.CompressedLength) {
-			return true;
-		}
-
-		return false;
+		return fileInfo.Length != chunk.CompressedLength;
 	}
 
 	private static async Task<(DepotPlan, BranchPasswords, DepotSet)> ParsePlan(ProgramFlags flags) {
@@ -618,7 +614,7 @@ internal static class Program {
 			}
 
 			if (!uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var appId)) {
-				Log.Error("Cannot parse line {Parts} (invalid app id {id})", line, parts[0]);
+				Log.Error("Cannot parse line {Parts} (invalid app id {Id})", line, parts[0]);
 				continue;
 			}
 
@@ -646,7 +642,7 @@ internal static class Program {
 
 			switch (parts.Length) {
 				case > 1 when !uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out depotId):
-					Log.Error("Cannot parse line {Parts} (invalid depot id {id})", line, parts[1]);
+					Log.Error("Cannot parse line {Parts} (invalid depot id {Id})", line, parts[1]);
 					continue;
 				case > 2 when !ulong.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out manifestId):
 					Log.Error("Cannot parse line {Parts} (invalid manifest id {Id})", line, parts[2]);

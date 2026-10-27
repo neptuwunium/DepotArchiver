@@ -5,14 +5,14 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DepotCommon;
-using DragonLib;
+using Pluto;
 using Spectre.Console;
 using SteamKit2;
 
 namespace DepotACF;
 
 internal static class Program {
-	private static bool TrueColor { get; } = Environment.GetEnvironmentVariable("COLORTERM")?.ToLower() is "truecolor" or "24bit";
+	private static bool TrueColor { get; } = Environment.GetEnvironmentVariable("COLORTERM")?.ToLowerInvariant() is "truecolor" or "24bit";
 
 	internal static IAnsiConsole Term { get; } = AnsiConsole.Create(new AnsiConsoleSettings {
 		Ansi = TrueColor ? AnsiSupport.Yes : AnsiSupport.Detect,
@@ -59,7 +59,7 @@ internal static class Program {
 		}
 
 		acf.Children.AddRange([
-			new KeyValue("appid", selectedApp.Id.ToString()),
+			new KeyValue("appid", selectedApp.Id.ToString(CultureInfo.InvariantCulture)),
 			new KeyValue("universe", "1"),
 			new KeyValue("StateFlags", "4"),
 			new KeyValue("name", selectedApp.Name),
@@ -141,8 +141,10 @@ internal static class Program {
 		Term.MarkupLine($"[cyan]Selected App:[/] {selectedApp}");
 		var choices = LoadDepots(depotsPath, selectedApp.KeyValue);
 
-		var selectionChoices = new List<DepotSelector> { new(0) };
-		selectionChoices.AddRange(choices.Keys.Select(x => new DepotSelector(x)));
+		List<DepotSelector> selectionChoices = [
+			new(0),
+			.. choices.Keys.Select(x => new DepotSelector(x)),
+		];
 
 		var selected = choices.ToDictionary(x => x.Key, y => y.Value[1]);
 
@@ -159,7 +161,7 @@ internal static class Program {
 						.Expand();
 
 			foreach (var depot in choices.Keys) {
-				table.AddRow(depot.ToString(), selected[depot].ToString());
+				table.AddRow(depot.ToString(CultureInfo.InvariantCulture), selected[depot].ToString());
 			}
 
 			Term.Write(table);
@@ -222,7 +224,7 @@ internal static class Program {
 						continue;
 					}
 
-					var depotId = uint.Parse(depot.Name);
+					var depotId = uint.Parse(depot.Name, CultureInfo.InvariantCulture);
 					var depotManifests = new List<ManifestInfo>();
 					var manifestFiles = Directory.GetFiles(manifestsPath, "*", SearchOption.TopDirectoryOnly);
 					var depotTask = ctx.AddTask($"[lime]Depot {depot.Name}[/]", maxValue: manifestFiles.Length);
@@ -238,7 +240,7 @@ internal static class Program {
 						depotManifests.Add(new ManifestInfo(manifest.ManifestGID, new DateTimeOffset(manifest.CreationTime), manifest));
 					}
 
-					depotManifests = loadedManifests[depotId] = depotManifests.OrderByDescending(x => x.Date).ToList();
+					depotManifests = loadedManifests[depotId] = [.. depotManifests.OrderByDescending(x => x.Date)];
 					depotManifests.Insert(0, new ManifestInfo(0, DateTimeOffset.MinValue, null!));
 
 					ctx.RemoveTask(depotTask);
@@ -271,7 +273,7 @@ internal static class Program {
 				foreach (var vdf in vdfFiles) {
 					loadTask.Increment(1);
 					var kv = KeyValue.LoadAsText(vdf) ?? KeyValue.Invalid;
-					var type = kv["common"]["type"].AsString()?.ToLower();
+					var type = kv["common"]["type"].AsString()?.ToLowerInvariant();
 					var appId = kv["appid"].AsUnsignedInteger();
 
 					if (type is not "game" || appId == 0) {

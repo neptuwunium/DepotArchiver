@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+using System.Globalization;
+
 namespace DepotACF;
 
 internal record DepotSelector(uint Id) {
-	private string Text { get; } = Id == 0 ? "Install" : Id.ToString();
+	private string Text { get; } = Id == 0 ? "Install" : Id.ToString(CultureInfo.InvariantCulture);
 	public override string ToString() => Text;
 }

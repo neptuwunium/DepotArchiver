@@ -2,6 +2,6 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-[submodule "DragonLib"]
-	path = DragonLib
-	url = https://github.com/yretenai/DragonLib.git
+[submodule "Neptune"]
+	path = Neptune
+	url = https://codeberg.org/neptuwunium/neptune

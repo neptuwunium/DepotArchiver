@@ -2,23 +2,27 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-using System.Reflection;
 using System.Text.RegularExpressions;
 using DepotCommon;
-using DragonLib.CommandLine;
+using Pluto.CommandLine;
 
 namespace DepotUnarchiver;
 
-internal record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
-	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(new CommandLineOptions {
-		HelpDelegate = PrintHelp,
-	});
-
+internal partial record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
 	[Flag("output", Help = "the directory to save files in")]
 	public string TargetDirectory { get; set; } = "game";
 
 	[Flag("depots", Help = "the directory chunks are saved in")]
 	public string DepotDirectory { get; set; } = "depots";
+
+	[Flag("depot-id", 0, Help = "the depot id to unarchive", Required = true)]
+	public string DepotId { get; set; } = string.Empty;
+
+	[Flag("manifest-id", 1, Help = "the manifest id to unarchive")]
+	public HashSet<string> ManifestIds { get; set; } = [];
+
+	[Flag("append-depot-id", Help = "append the depot id to the file path")]
+	public bool AppendDepot { get; set; }
 
 	[Flag("list", Help = "list files in the manifest")]
 	public bool List { get; set; }
@@ -26,32 +30,23 @@ internal record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
 	[Flag("filter", Help = "only export files that match these regex filters", FileListPrefix = '@')]
 	public List<Regex> Filter { get; set; } = [];
 
-	[Flag("depot-id", Positional = 0, Help = "the depot id to unarchive", IsRequired = true)]
-	public string DepotId { get; set; } = string.Empty;
-
-	[Flag("manifest-id", Positional = 1, Help = "the manifest id to unarchive")]
-	public HashSet<string> ManifestIds { get; set; } = [];
-
 	[Flag("threads", Help = "number of threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
 	[Flag("append-manifest-id", Help = "append the manifest id to the file path")]
 	public bool AppendManifest { get; set; }
 
-	[Flag("append-depot-id", Help = "append the depot id to the file path")]
-	public bool AppendDepot { get; set; }
-
-	[Flag("no-clobber", Aliases = ["n"], Help = "do not overwrite files that already exist")]
+	[Flag("no-clobber", "n", Help = "do not overwrite files that already exist")]
 	public bool NoClobber { get; set; }
 
-	[Flag("time", Aliases = ["t"], Help = "update file time to the manifest time")]
+	[Flag("time", "t", Help = "update file time to the manifest time")]
 	public bool Time { get; set; }
 
 	[Flag("validate", Help = "validate files after extraction")]
 	public bool Validate { get; set; }
 
-	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
-		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
+	public override void PrintHelp(List<IFlagMeta> flags, CommandLineOptions options, bool helpInvoked) {
+		base.PrintHelp(flags, options, helpInvoked);
 		Console.WriteLine("Id Format:");
 		Console.WriteLine("\tBoth depot-id and manifest-id can be depotId:manifestId.");
 		Console.WriteLine("\tThe first id argument will always be depotId.");

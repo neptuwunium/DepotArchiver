@@ -4,26 +4,24 @@
 
 using System.Text.RegularExpressions;
 using DepotCommon;
-using DragonLib.CommandLine;
+using Pluto.CommandLine;
 
 namespace DepotACF;
 
-internal record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
-	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>();
-
-	[Flag("depots", Positional = 0, Help = "the directory chunks are saved in", IsRequired = false)]
+internal partial record ProgramFlags : CommandLineFlags, IUnarchiveOptions {
+	[Flag("depots", 0, Help = "the directory chunks are saved in", Required = false)]
 	public string? DepotDirectory { get; set; }
 
-	[Flag("output", Positional = 1, Help = "the directory to install to", IsRequired = false)]
+	[Flag("output", 1, Help = "the directory to install to", Required = false)]
 	public string? TargetDirectory { get; set; }
 
 	[Flag("threads", Help = "number of threads to spawn")]
 	public int Threads { get; set; } = Environment.ProcessorCount;
 
-	[Flag("no-clobber", Aliases = ["n"], Help = "do not overwrite files that already exist")]
+	[Flag("no-clobber", "n", Help = "do not overwrite files that already exist")]
 	public bool NoClobber { get; set; }
 
-	[Flag("time", Aliases = ["t"], Help = "update file time to the manifest time")]
+	[Flag("time", "t", Help = "update file time to the manifest time")]
 	public bool Time { get; set; }
 
 	[Flag("validate", Help = "validate files after extraction")]

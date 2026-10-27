@@ -16,11 +16,12 @@ SPDX-License-Identifier: GPL-2.0-or-later
 	</PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="../DepotCommon/DepotCommon.csproj" />
+		<ProjectReference Include="../DepotCommon/DepotCommon.csproj"/>
+		<ProjectReference Include="../Neptune/Pluto.SourceGen/Pluto.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1"/>
 	</ItemGroup>
 
 </Project>

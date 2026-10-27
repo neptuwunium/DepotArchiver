@@ -7,7 +7,7 @@ using System.Globalization;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using DragonLib.Extensions;
+using Pluto.Extensions;
 using Serilog;
 using SteamKit2;
 using SteamKit2.CDN;
@@ -61,7 +61,7 @@ public static class Unarchive {
 					if (Console.IsErrorRedirected) {
 						Console.Error.WriteLine(file.FileName);
 					} else {
-						Log.Information("{0}", file.FileName);
+						Log.Information("{Name}", file.FileName);
 					}
 				}
 
@@ -163,30 +163,34 @@ public static class Unarchive {
 			Log.Information("Unpacked {Size} bytes for manifest {ManifestId} (Depot {DepotId})", sum.HumanReadableBytes, manifestId, manifest.DepotID);
 		}
 
-		if (Directory.Exists(targetDirectory)) {
-			if (flags.Time) {
-				Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
+		if (!Directory.Exists(targetDirectory)) {
+			return;
+		}
+
+		if (flags.Time) {
+			Directory.SetCreationTimeUtc(targetDirectory, manifest.CreationTime);
+		}
+
+		if (flags is { Validate: false, Time: false }) {
+			return;
+		}
+
+		foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
+			var dest = Path.Combine(targetDirectory, file.FileName);
+			if (string.IsNullOrEmpty(dest)) {
+				continue;
 			}
 
-			if (flags.Validate || flags.Time) {
-				foreach (var file in manifest.Files.Where(file => flags.Filter.Count == 0 || flags.Filter.Any(x => x.IsMatch(file.FileName)))) {
-					var dest = Path.Combine(targetDirectory, file.FileName);
-					if (string.IsNullOrEmpty(dest)) {
-						continue;
-					}
-
-					if (flags.Time) {
-						if ((file.Flags & EDepotFileFlag.Directory) != 0) {
-							Directory.SetCreationTimeUtc(dest, manifest.CreationTime);
-						} else {
-							File.SetCreationTimeUtc(dest, manifest.CreationTime);
-						}
-					}
-
-					if (flags.Validate) {
-						ValidateFile(file, dest);
-					}
+			if (flags.Time) {
+				if ((file.Flags & EDepotFileFlag.Directory) != 0) {
+					Directory.SetCreationTimeUtc(dest, manifest.CreationTime);
+				} else {
+					File.SetCreationTimeUtc(dest, manifest.CreationTime);
 				}
+			}
+
+			if (flags.Validate) {
+				ValidateFile(file, dest);
 			}
 		}
 

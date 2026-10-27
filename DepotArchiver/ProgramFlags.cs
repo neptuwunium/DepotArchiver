@@ -3,14 +3,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Globalization;
-using System.Reflection;
-using DragonLib.CommandLine;
+using Pluto.CommandLine;
 
 namespace DepotArchiver;
 
-internal record ProgramFlags : CommandLineFlags {
-	public static ProgramFlags Instance { get; set; } = CommandLineFlagsParser.ParseFlags<ProgramFlags>(CommandLineOptions.Default with { HelpDelegate = PrintHelp });
-
+internal partial record ProgramFlags : CommandLineFlags {
 	[Flag("remember-password", Help = "remember password when logging in", Env = "DEPOTARCHIVER_REMEMBER_PASSWORD")]
 	public bool RememberPassword { get; set; }
 
@@ -23,7 +20,7 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("token", Help = "the login token for the account", Env = "DEPOTARCHIVER_TOKEN")]
 	public string? Token { get; set; }
 
-	[Flag("plan", Positional = 0, Help = "path to csv plan file, this can also be an app id.", IsRequired = true)]
+	[Flag("plan", 0, Help = "path to csv plan file, this can also be an app id.", Required = true)]
 	public string ArchivePlanFile { get; set; } = null!;
 
 	[Flag("depots", Help = "the directory to save chunks in")]
@@ -74,8 +71,8 @@ internal record ProgramFlags : CommandLineFlags {
 	[Flag("attempts", Help = "the number of times to attempt servers")]
 	public int Attempts { get; set; } = 3;
 
-	private static void PrintHelp(Dictionary<PropertyInfo, (FlagAttribute Flag, Type FlagType)> flags, object instance, CommandLineOptions options, bool helpInvoked) {
-		CommandLineFlagsParser.PrintHelp(flags, instance, options, helpInvoked);
+	public override void PrintHelp(List<IFlagMeta> flags, CommandLineOptions options, bool helpInvoked) {
+		base.PrintHelp(flags, options, helpInvoked);
 		Console.WriteLine("CSV Format:");
 		Console.WriteLine("\tLines starting with # are ignored");
 		Console.WriteLine("\tappId,depotId,manifestId,branch");

@@ -2,11 +2,12 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+using System.Globalization;
 using SteamKit2;
 
 namespace DepotACF;
 
 internal record ManifestInfo(ulong Id, DateTimeOffset Date, DepotManifest Manifest) {
-	private string Text { get; } = Id == 0 ? "Cancel" : $"{Date.ToString()} ({Id})";
+	private string Text { get; } = Id == 0 ? "Cancel" : $"{Date.ToString(CultureInfo.InvariantCulture)} ({Id})";
 	public override string ToString() => Text;
 }

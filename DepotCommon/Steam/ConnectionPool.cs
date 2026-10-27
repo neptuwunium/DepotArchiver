@@ -21,6 +21,8 @@ public sealed class ConnectionPool : IDisposable {
 	private int NextServer { get; set; }
 	public int Attempts => Servers.Count;
 
+	public Server Connection => Servers[NextServer % Servers.Count];
+
 	public void Dispose() => Client.Dispose();
 
 	public async Task UpdateServerList(uint cellId) {
@@ -42,8 +44,6 @@ public sealed class ConnectionPool : IDisposable {
 			throw new Exception("Failed to retrieve any download servers.");
 		}
 	}
-
-	public Server Connection => Servers[NextServer % Servers.Count];
 
 	public Server ExchangeBrokenConnection(Server server) {
 		lock (Servers) {

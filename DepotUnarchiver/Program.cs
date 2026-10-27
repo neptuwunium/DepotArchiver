@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using DepotCommon;
-using DragonLib;
+using Pluto;
 using Serilog;
 using Serilog.Events;
 using SteamKit2;
@@ -15,7 +15,7 @@ namespace DepotUnarchiver;
 internal static class Program {
 	private static void Main() {
 		Helpers.ResetCulture();
-		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console().CreateLogger();
+		Log.Logger = new LoggerConfiguration().MinimumLevel.Is(Debugger.IsAttached ? LogEventLevel.Debug : LogEventLevel.Information).WriteTo.Console(formatProvider: CultureInfo.InvariantCulture).CreateLogger();
 
 		var flags = ProgramFlags.Instance;
 
@@ -55,8 +55,8 @@ internal static class Program {
 						continue;
 					}
 
-					var depotId = uint.Parse(depot.Name);
-					var manifestId = ulong.Parse(gid.Value);
+					var depotId = uint.Parse(depot.Name, CultureInfo.InvariantCulture);
+					var manifestId = ulong.Parse(gid.Value, CultureInfo.InvariantCulture);
 					if (!depotPlan.TryGetValue(depotId, out var depotManifests)) {
 						depotPlan[depotId] = depotManifests = [];
 					}
@@ -74,7 +74,7 @@ internal static class Program {
 
 			if (manifestIds.Count == 0) {
 				foreach (var manifestId in Directory.EnumerateFiles(manifestsPath, "*", SearchOption.TopDirectoryOnly)) {
-					manifestIds.Add(ulong.Parse(Path.GetFileName(manifestId), NumberStyles.Integer));
+					manifestIds.Add(ulong.Parse(Path.GetFileName(manifestId), NumberStyles.Integer, CultureInfo.InvariantCulture));
 				}
 			}
 
