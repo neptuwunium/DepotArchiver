@@ -12,20 +12,20 @@ jobs:
                 rid: [ linux-x64, linux-musl-x64, linux-arm64, linux-musl-arm64, osx-arm64, osx-x64, win-x64 ]
         runs-on: ubuntu-latest
         steps:
-            -   uses: actions/checkout@v4
+            -   uses: actions/checkout@v7
                 with:
                     fetch-depth: 0
                     submodules: 'recursive'
-            -   uses: actions/setup-dotnet@v4
+            -   uses: actions/setup-dotnet@v6
                 with:
                     dotnet-version: 11.x
             -   run: dotnet publish project.traversal -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Runtime/${{matrix.rid}} -f net11.0 -r ${{ matrix.rid }}
             -   run: dotnet publish project.traversal -c Release -o ${{ github.workspace }}/Publish/DepotArchiver-Standalone/${{matrix.rid}} -f net11.0 -r ${{ matrix.rid }} --sc
-            -   uses: actions/upload-artifact@v4
+            -   uses: actions/upload-artifact@v7
                 with:
                     name: DepotArchiver-${{ matrix.rid }}
                     path: Publish/DepotArchiver-Runtime/${{matrix.rid}}
-            -   uses: actions/upload-artifact@v4
+            -   uses: actions/upload-artifact@v7
                 with:
                     name: DepotArchiver-${{ matrix.rid }}-Standalone
                     path: Publish/DepotArchiver-Standalone/${{matrix.rid}}
